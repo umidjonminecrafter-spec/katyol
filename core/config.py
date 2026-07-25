@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "password"
     DATABASE_URL: Optional[str] = None
 
+    SUPERADMIN_USERNAME: str = "+998901234567"
+    SUPERADMIN_PASSWORD: str = "Password123!"
+
     SECRET_KEY: str = "kotyol-erp-super-secret-jwt-key-2026-production-ready"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60

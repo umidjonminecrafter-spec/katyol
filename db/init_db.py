@@ -1,5 +1,6 @@
 import asyncio
 from sqlalchemy.future import select
+from core.config import settings
 from core.database import AsyncSessionLocal, engine, Base
 from core.security import get_password_hash
 from apps.accounts.models import User, Organization, Branch
@@ -28,15 +29,15 @@ async def init_db(force_drop=False):
         await session.flush()
 
         # 2. Superadmin user
-        user_res = await session.execute(select(User).where(User.username == "+998901234567"))
+        user_res = await session.execute(select(User).where(User.username == settings.SUPERADMIN_USERNAME))
         admin_user = user_res.scalars().first()
         if not admin_user:
             admin_user = User(
-                username="+998901234567",
+                username=settings.SUPERADMIN_USERNAME,
                 full_name="Alex Vance",
-                hashed_password=get_password_hash("Password123!"),
+                hashed_password=get_password_hash(settings.SUPERADMIN_PASSWORD),
                 role="ADMIN",
-                phone="+998901234567",
+                phone=settings.SUPERADMIN_USERNAME,
                 department="Management",
                 organization_name="Kotyol Group",
                 branch_name="Asosiy filial",
@@ -46,7 +47,7 @@ async def init_db(force_drop=False):
             )
             session.add(admin_user)
             await session.flush()
-            print("Superadmin user created: +998901234567 / Password123!")
+            print(f"Superadmin user created: {settings.SUPERADMIN_USERNAME} / {settings.SUPERADMIN_PASSWORD}")
 
         # 3. Master Data
         cat_res = await session.execute(select(ProductCategory).where(ProductCategory.code == "CAT-BOILER"))
