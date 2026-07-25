@@ -32,7 +32,6 @@ from apps.dashboard.reports import router as reports_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     yield
 
