@@ -7,9 +7,17 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-from app.core.config import settings
-from app.core.database import Base
-from app.models import user, master_data, product, warehouse, purchase, sales, production, finance, audit
+from core.config import settings
+from core.database import Base
+from apps.accounts import models as accounts_models
+from apps.master_data import models as master_data_models
+from apps.products import models as products_models
+from apps.warehouse import models as warehouse_models
+from apps.purchasing import models as purchasing_models
+from apps.sales import models as sales_models
+from apps.production import models as production_models
+from apps.finance import models as finance_models
+from apps.audit import models as audit_models
 
 config = context.config
 
