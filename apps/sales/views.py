@@ -1,52 +1,45 @@
-from fastapi import Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.database import get_db
-from core.dependencies import get_current_user, RequireRole
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated
 from core.audit_helper import record_audit_log
-from apps.accounts.models import User
 from apps.sales.services import SalesService
-from apps.sales.schemas import SaleCreate, SaleResponse
+from apps.sales.serializers import SaleCreateSerializer, SaleResponseSerializer
 
-async def list_sales_view(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    items, total = await SalesService.get_multi(db, page=page, limit=limit)
-    total_pages = (total + limit - 1) // limit if limit > 0 else 1
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def sales_list_create_view(request):
+    if request.method == 'GET':
+        page = int(request.query_params.get('page', 1))
+        limit = int(request.query_params.get('limit', 20))
 
-    response_items = []
-    for s in items:
-        resp = SaleResponse.model_validate(s)
-        if s.customer:
-            resp.customer_name = s.customer.name
-        response_items.append(resp)
+        items, total = SalesService.get_multi(page=page, limit=limit)
+        total_pages = (total + limit - 1) // limit if limit > 0 else 1
 
-    return {
-        "success": True,
-        "data": response_items,
-        "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
-    }
+        response_items = SaleResponseSerializer(items, many=True).data
 
-async def create_sale_view(
-    request: Request,
-    body: SaleCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER", "ACCOUNTANT"]))
-):
-    sale = await SalesService.create_sale(db, body.model_dump(), created_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
+        return Response({
+            "success": True,
+            "data": response_items,
+            "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
+        })
+
+    # POST (create)
+    if request.user.role not in ["ADMIN", "MANAGER", "ACCOUNTANT"]:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = SaleCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+
+    sale = SalesService.create_sale(body_data, created_by_id=request.user.id)
+    record_audit_log(
         action="CREATE",
         entity_name="SALE",
         entity_id=sale.id,
-        actor_id=current_user.id,
-        new_values=body.model_dump(),
+        actor_id=request.user.id,
+        new_values=body_data,
         request=request
     )
-    resp = SaleResponse.model_validate(sale)
-    if sale.customer:
-        resp.customer_name = sale.customer.name
-    return {"success": True, "data": resp}
+    return Response({"success": True, "data": SaleResponseSerializer(sale).data}, status=201)

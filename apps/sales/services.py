@@ -1,18 +1,12 @@
 from decimal import Decimal
-from typing import List, Tuple, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
-
 from core.exceptions import CustomAppException
 from apps.sales.models import Sale
 
 class SalesService:
     @staticmethod
-    async def create_sale(db: AsyncSession, data: dict, created_by_id: str) -> Sale:
+    def create_sale(data: dict, created_by_id: str) -> Sale:
         inv_num = data.get("invoice_number")
-        existing = await db.execute(select(Sale).where(Sale.invoice_number == inv_num))
-        if existing.scalars().first():
+        if Sale.objects.filter(invoice_number=inv_num).exists():
             raise CustomAppException(message=f"'{inv_num}' raqamli sotuv hisobi allaqachon mavjud", error_code="DUPLICATE_INVOICE_NUMBER")
 
         qty = Decimal(str(data["quantity"]))
@@ -22,7 +16,7 @@ class SalesService:
         tax = Decimal(str(data.get("tax_amount", 0)))
         total_amount = subtotal - disc + tax
 
-        sale = Sale(
+        sale = Sale.objects.create(
             invoice_number=inv_num,
             customer_id=data["customer_id"],
             boiler_id=data.get("boiler_id"),
@@ -38,15 +32,13 @@ class SalesService:
             delivery_status="PENDING",
             created_by_id=created_by_id
         )
-        db.add(sale)
-        await db.flush()
         return sale
 
     @staticmethod
-    async def update_status(db: AsyncSession, sale_id: str, data: dict, updated_by_id: str) -> Sale:
-        res = await db.execute(select(Sale).where(Sale.id == sale_id))
-        sale = res.scalars().first()
-        if not sale:
+    def update_status(sale_id: str, data: dict, updated_by_id: str) -> Sale:
+        try:
+            sale = Sale.objects.get(id=sale_id)
+        except Sale.DoesNotExist:
             raise CustomAppException(message="Sotuv hujjati topilmadi", status_code=404)
 
         if "payment_status" in data and data["payment_status"]:
@@ -55,24 +47,18 @@ class SalesService:
             sale.delivery_status = data["delivery_status"]
 
         sale.updated_by_id = updated_by_id
-        await db.flush()
+        sale.save()
         return sale
 
     @staticmethod
-    async def get_multi(
-        db: AsyncSession,
+    def get_multi(
         page: int = 1,
         limit: int = 20
-    ) -> Tuple[List[Sale], int]:
-        query = select(Sale)
-        count_query = select(func.count()).select_from(Sale)
-
-        total_res = await db.execute(count_query)
-        total = total_res.scalar() or 0
+    ):
+        qs = Sale.objects.all()
+        total = qs.count()
 
         skip = (page - 1) * limit
-        query = query.order_by(Sale.created_at.desc()).offset(skip).limit(limit)
-        res = await db.execute(query)
-        items = list(res.scalars().all())
+        items = list(qs.order_by('-created_at')[skip:skip + limit])
 
         return items, total

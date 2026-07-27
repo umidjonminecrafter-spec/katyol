@@ -1,29 +1,24 @@
-from sqlalchemy import Column, String, Numeric, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import relationship
+from django.db import models
 from core.base_model import BaseModel
 
 class WarehouseStock(BaseModel):
-    __tablename__ = "warehouse_stock"
-    __table_args__ = (UniqueConstraint("warehouse_id", "product_id", name="uix_warehouse_product"),)
+    warehouse = models.ForeignKey('master_data.Warehouse', on_delete=models.CASCADE, db_column='warehouse_id', related_name='stocks')
+    product = models.ForeignKey('products.Product', on_delete=models.CASCADE, db_column='product_id', related_name='warehouse_stocks')
+    quantity = models.DecimalField(max_digits=15, decimal_places=3, default=0.000)
+    reserved_quantity = models.DecimalField(max_digits=15, decimal_places=3, default=0.000)
+    avg_unit_cost = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
 
-    warehouse_id = Column(String(36), ForeignKey("warehouses.id"), nullable=False)
-    product_id = Column(String(36), ForeignKey("products.id"), nullable=False)
-    quantity = Column(Numeric(15, 3), nullable=False, default=0.000)
-    reserved_quantity = Column(Numeric(15, 3), default=0.000)
-    avg_unit_cost = Column(Numeric(15, 2), default=0.00)
-
-    warehouse = relationship("Warehouse", lazy="selectin")
-    product = relationship("Product", lazy="selectin")
+    class Meta:
+        db_table = 'warehouse_stock'
+        unique_together = ('warehouse', 'product')
 
 class StockMovement(BaseModel):
-    __tablename__ = "stock_movements"
+    movement_type = models.CharField(max_length=50)
+    product = models.ForeignKey('products.Product', on_delete=models.CASCADE, db_column='product_id', related_name='stock_movements')
+    warehouse = models.ForeignKey('master_data.Warehouse', on_delete=models.CASCADE, db_column='warehouse_id', related_name='stock_movements')
+    quantity = models.DecimalField(max_digits=15, decimal_places=3)
+    reference_id = models.CharField(max_length=100, null=True, blank=True)
+    notes = models.CharField(max_length=255, null=True, blank=True)
 
-    movement_type = Column(String(50), nullable=False)
-    product_id = Column(String(36), ForeignKey("products.id"), nullable=False)
-    warehouse_id = Column(String(36), ForeignKey("warehouses.id"), nullable=False)
-    quantity = Column(Numeric(15, 3), nullable=False)
-    reference_id = Column(String(100), nullable=True)
-    notes = Column(String(255), nullable=True)
-
-    product = relationship("Product", lazy="selectin")
-    warehouse = relationship("Warehouse", lazy="selectin")
+    class Meta:
+        db_table = 'stock_movements'

@@ -1,48 +1,40 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
-from core.database import get_db
-from core.dependencies import get_current_user
-from apps.accounts.models import User
+from django.db import models
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated
+
 from apps.sales.models import Sale
 from apps.purchasing.models import Purchase
 from apps.production.models import ProductionBatch
 from apps.warehouse.models import WarehouseStock, StockMovement
-from apps.products.models import Product, Boiler
 from apps.master_data.models import Customer
 from apps.finance.models import FinancialTransaction
 
-router = APIRouter()
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_general_report(request):
+    sales_sum_res = Sale.objects.aggregate(total=models.Sum('total_amount'))['total'] or 0.0
+    total_sales = float(sales_sum_res)
 
-@router.get("/general")
-async def get_general_report(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    sales_sum_res = await db.execute(select(func.sum(Sale.total_amount)))
-    total_sales = float(sales_sum_res.scalar() or 0.0)
+    prod_res = ProductionBatch.objects.aggregate(total=models.Sum('completed_quantity'))['total'] or 0
+    total_production = int(prod_res)
 
-    prod_res = await db.execute(select(func.sum(ProductionBatch.completed_quantity)))
-    total_production = int(prod_res.scalar() or 0)
+    all_stock = WarehouseStock.objects.all()
+    stock_value = sum(float(item.quantity * item.avg_unit_cost) for item in all_stock)
 
-    stock_res = await db.execute(select(func.sum(WarehouseStock.quantity * WarehouseStock.avg_unit_cost)))
-    stock_value = float(stock_res.scalar() or 0.0)
-
-    purchase_res = await db.execute(select(func.sum(Purchase.total_amount)))
-    total_purchases = float(purchase_res.scalar() or 0.0)
+    purchase_res = Purchase.objects.aggregate(total=models.Sum('total_amount'))['total'] or 0.0
+    total_purchases = float(purchase_res)
 
     net_profit = total_sales * 0.24
     ops_expenses = total_purchases * 0.15
 
-    receivables_res = await db.execute(select(func.sum(Sale.total_amount)).where(Sale.payment_status == "UNPAID"))
-    receivables = float(receivables_res.scalar() or 0.0)
+    receivables_res = Sale.objects.filter(payment_status="UNPAID").aggregate(total=models.Sum('total_amount'))['total'] or 0.0
+    receivables = float(receivables_res)
 
-    # Calculate actual chart data from sales and purchases
-    sales_res = await db.execute(select(Sale))
-    all_sales = sales_res.scalars().all()
-    purchase_res = await db.execute(select(Purchase))
-    all_purchases = purchase_res.scalars().all()
+    all_sales = Sale.objects.all()
+    all_purchases = Purchase.objects.all()
 
     months_names = {
         "01": "Yanvar", "02": "Fevral", "03": "Mart", "04": "Aprel",
@@ -92,21 +84,18 @@ async def get_general_report(
         },
         "chart": chart_data
     }
-    return {"success": True, "data": data}
+    return Response({"success": True, "data": data})
 
-@router.get("/sales")
-async def get_sales_report(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    sales_res = await db.execute(select(Sale))
-    all_sales = sales_res.scalars().all()
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_sales_report(request):
+    all_sales = Sale.objects.all()
 
     total_sales = sum(float(sale.total_amount) for sale in all_sales)
     total_orders = len(all_sales)
 
-    customer_count_res = await db.execute(select(func.count(Customer.id)))
-    customer_count = int(customer_count_res.scalar() or 0)
+    customer_count = Customer.objects.count()
 
     months_names = {
         "01": "Yanvar", "02": "Fevral", "03": "Mart", "04": "Aprel",
@@ -149,7 +138,7 @@ async def get_sales_report(
 
     product_sales = {}
     for sale in all_sales:
-        prod_name = sale.boiler.model_name if sale.boiler else (sale.product.name if sale.product else "Noma'lum Mahsulot")
+        prod_name = sale.boiler.name if sale.boiler else (sale.product.name if sale.product else "Noma'lum Mahsulot")
         if prod_name not in product_sales:
             product_sales[prod_name] = {"soldQuantity": 0, "totalRevenue": 0.0}
         product_sales[prod_name]["soldQuantity"] += int(sale.quantity)
@@ -167,20 +156,17 @@ async def get_sales_report(
         "topCustomers": top_customers,
         "topProducts": top_products
     }
-    return {"success": True, "data": data}
+    return Response({"success": True, "data": data})
 
-@router.get("/warehouse")
-async def get_warehouse_report(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    stock_res = await db.execute(select(WarehouseStock))
-    all_stock = stock_res.scalars().all()
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_warehouse_report(request):
+    all_stock = WarehouseStock.objects.all()
 
     stock_value = sum(float(item.quantity * item.avg_unit_cost) for item in all_stock)
     items_count = len(all_stock)
 
-    # Category distribution
     cat_distribution = {}
     for item in all_stock:
         cat_name = item.product.category.name if (item.product and item.product.category) else "Boshqa"
@@ -191,7 +177,6 @@ async def get_warehouse_report(
         for name, val in cat_distribution.items()
     ]
 
-    # Low stock list
     low_stock_list = []
     for item in all_stock:
         prod = item.product
@@ -203,10 +188,7 @@ async def get_warehouse_report(
                 "unit": prod.unit.name if prod.unit else "dona"
             })
 
-    # Most used materials
-    movs_res = await db.execute(select(StockMovement))
-    all_movs = movs_res.scalars().all()
-
+    all_movs = StockMovement.objects.all()
     used_materials = {}
     for m in all_movs:
         if m.movement_type in ["OUT", "CONSUMPTION", "PRODUCTION_USE", "DISPOSAL"]:
@@ -236,15 +218,13 @@ async def get_warehouse_report(
         "lowStockList": low_stock_list,
         "mostUsedMaterials": most_used_materials
     }
-    return {"success": True, "data": data}
+    return Response({"success": True, "data": data})
 
-@router.get("/production")
-async def get_production_report(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    batches_res = await db.execute(select(ProductionBatch))
-    all_batches = batches_res.scalars().all()
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_production_report(request):
+    all_batches = ProductionBatch.objects.all()
 
     completed_batches = sum(1 for b in all_batches if b.status == "COMPLETED")
     in_progress_batches = sum(1 for b in all_batches if b.status in ["IN_PROGRESS", "QUALITY_CHECK", "SCHEDULED"])
@@ -271,17 +251,14 @@ async def get_production_report(
         "averageProductionDays": avg_days,
         "stageBreakdown": stage_breakdown
     }
-    return {"success": True, "data": data}
+    return Response({"success": True, "data": data})
 
-@router.get("/finance")
-async def get_finance_report(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    sales_res = await db.execute(select(Sale))
-    all_sales = sales_res.scalars().all()
-    purchase_res = await db.execute(select(Purchase))
-    all_purchases = purchase_res.scalars().all()
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_finance_report(request):
+    all_sales = Sale.objects.all()
+    all_purchases = Purchase.objects.all()
 
     months_names = {
         "01": "Yanvar", "02": "Fevral", "03": "Mart", "04": "Aprel",
@@ -326,9 +303,7 @@ async def get_finance_report(
             {"month": "Aprel", "income": 0.0, "expense": 0.0, "profit": 0.0},
         ]
 
-    tx_res = await db.execute(select(FinancialTransaction))
-    all_tx = tx_res.scalars().all()
-
+    all_tx = FinancialTransaction.objects.all()
     expense_dist = {}
     for tx in all_tx:
         if tx.type == "EXPENSE":
@@ -352,13 +327,12 @@ async def get_finance_report(
         "monthlyComparison": monthly_comparison_list,
         "expenseDistribution": expense_distribution
     }
-    return {"success": True, "data": data}
+    return Response({"success": True, "data": data})
 
-@router.get("/services")
-async def get_services_report(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_services_report(request):
     data = {
         "completedServices": 0,
         "warrantyServices": 0,
@@ -366,4 +340,4 @@ async def get_services_report(
         "pendingServices": 0,
         "serviceTypesBreakdown": []
     }
-    return {"success": True, "data": data}
+    return Response({"success": True, "data": data})

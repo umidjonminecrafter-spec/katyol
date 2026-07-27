@@ -1,76 +1,68 @@
-from typing import Optional
-from fastapi import Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.database import get_db
-from core.dependencies import get_current_user, RequireRole
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated
 from core.audit_helper import record_audit_log
-from apps.accounts.models import User
 from apps.production.services import ProductionService
-from apps.production.schemas import ProductionBatchCreate, ProductionBatchUpdate, ProductionBatchResponse
+from apps.production.serializers import ProductionBatchCreateSerializer, ProductionBatchUpdateSerializer, ProductionBatchResponseSerializer
 
-async def list_production_batches_view(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    items, total = await ProductionService.get_multi(db, page=page, limit=limit, status=status_filter)
-    total_pages = (total + limit - 1) // limit if limit > 0 else 1
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def production_batches_list_create_view(request):
+    if request.method == 'GET':
+        page = int(request.query_params.get('page', 1))
+        limit = int(request.query_params.get('limit', 20))
+        status_filter = request.query_params.get('status')
 
-    response_items = []
-    for b in items:
-        resp = ProductionBatchResponse.model_validate(b)
-        if b.boiler:
-            resp.boiler_name = b.boiler.name
-        response_items.append(resp)
+        items, total = ProductionService.get_multi(page=page, limit=limit, status=status_filter)
+        total_pages = (total + limit - 1) // limit if limit > 0 else 1
 
-    return {
-        "success": True,
-        "data": response_items,
-        "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
-    }
+        response_items = ProductionBatchResponseSerializer(items, many=True).data
 
-async def create_production_batch_view(
-    request: Request,
-    body: ProductionBatchCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER", "TECHNICIAN"]))
-):
-    batch = await ProductionService.create_batch(db, body.model_dump(), created_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
+        return Response({
+            "success": True,
+            "data": response_items,
+            "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
+        })
+
+    # POST (create)
+    if request.user.role not in ["ADMIN", "MANAGER", "TECHNICIAN"]:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = ProductionBatchCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+
+    batch = ProductionService.create_batch(body_data, created_by_id=request.user.id)
+    record_audit_log(
         action="CREATE",
         entity_name="PRODUCTION_BATCH",
         entity_id=batch.id,
-        actor_id=current_user.id,
-        new_values=body.model_dump(),
+        actor_id=request.user.id,
+        new_values=body_data,
         request=request
     )
-    resp = ProductionBatchResponse.model_validate(batch)
-    if batch.boiler:
-        resp.boiler_name = batch.boiler.name
-    return {"success": True, "data": resp}
+    return Response({"success": True, "data": ProductionBatchResponseSerializer(batch).data}, status=201)
 
-async def update_production_batch_view(
-    id: str,
-    request: Request,
-    body: ProductionBatchUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER", "TECHNICIAN"]))
-):
-    batch = await ProductionService.update_batch(db, id, body.model_dump(exclude_unset=True), updated_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
+@api_view(['PUT'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def update_production_batch_view(request, id):
+    if request.user.role not in ["ADMIN", "MANAGER", "TECHNICIAN"]:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = ProductionBatchUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+
+    batch = ProductionService.update_batch(id, body_data, updated_by_id=request.user.id)
+    record_audit_log(
         action="UPDATE",
         entity_name="PRODUCTION_BATCH",
         entity_id=id,
-        actor_id=current_user.id,
-        new_values=body.model_dump(exclude_unset=True),
+        actor_id=request.user.id,
+        new_values=body_data,
         request=request
     )
-    resp = ProductionBatchResponse.model_validate(batch)
-    if batch.boiler:
-        resp.boiler_name = batch.boiler.name
-    return {"success": True, "data": resp}
+    return Response({"success": True, "data": ProductionBatchResponseSerializer(batch).data})

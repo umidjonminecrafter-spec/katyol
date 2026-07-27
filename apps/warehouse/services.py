@@ -1,68 +1,48 @@
-from typing import List, Tuple, Optional
 from decimal import Decimal
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
-
 from apps.warehouse.models import WarehouseStock, StockMovement
 
 class WarehouseService:
     @staticmethod
-    async def get_stocks(
-        db: AsyncSession,
-        warehouse_id: Optional[str] = None,
-        product_id: Optional[str] = None,
+    def get_stocks(
+        warehouse_id: str = None,
+        product_id: str = None,
         page: int = 1,
         limit: int = 20
-    ) -> Tuple[List[WarehouseStock], int]:
-        query = select(WarehouseStock)
-        count_query = select(func.count()).select_from(WarehouseStock)
+    ):
+        qs = WarehouseStock.objects.all()
 
         if warehouse_id:
-            query = query.where(WarehouseStock.warehouse_id == warehouse_id)
-            count_query = count_query.where(WarehouseStock.warehouse_id == warehouse_id)
+            qs = qs.filter(warehouse_id=warehouse_id)
 
         if product_id:
-            query = query.where(WarehouseStock.product_id == product_id)
-            count_query = count_query.where(WarehouseStock.product_id == product_id)
+            qs = qs.filter(product_id=product_id)
 
-        total_res = await db.execute(count_query)
-        total = total_res.scalar() or 0
+        total = qs.count()
 
         skip = (page - 1) * limit
-        query = query.order_by(WarehouseStock.updated_at.desc()).offset(skip).limit(limit)
-        res = await db.execute(query)
-        items = list(res.scalars().all())
+        items = list(qs.order_by('-updated_at')[skip:skip + limit])
 
         return items, total
 
     @staticmethod
-    async def record_receipt(
-        db: AsyncSession,
+    def record_receipt(
         warehouse_id: str,
         product_id: str,
         quantity: Decimal,
         unit_cost: Decimal,
-        reference_id: Optional[str] = None,
-        notes: Optional[str] = None
+        reference_id: str = None,
+        notes: str = None
     ) -> WarehouseStock:
-        res = await db.execute(
-            select(WarehouseStock).where(
-                WarehouseStock.warehouse_id == warehouse_id,
-                WarehouseStock.product_id == product_id
-            )
-        )
-        stock = res.scalars().first()
+        stock = WarehouseStock.objects.filter(warehouse_id=warehouse_id, product_id=product_id).first()
 
         if not stock:
-            stock = WarehouseStock(
+            stock = WarehouseStock.objects.create(
                 warehouse_id=warehouse_id,
                 product_id=product_id,
                 quantity=quantity,
                 reserved_quantity=Decimal("0.000"),
                 avg_unit_cost=unit_cost
             )
-            db.add(stock)
         else:
             old_total = stock.quantity * stock.avg_unit_cost
             new_addition = quantity * unit_cost
@@ -70,8 +50,9 @@ class WarehouseService:
             if new_qty > 0:
                 stock.avg_unit_cost = (old_total + new_addition) / new_qty
             stock.quantity = new_qty
+            stock.save()
 
-        movement = StockMovement(
+        StockMovement.objects.create(
             movement_type="PURCHASE_RECEIPT",
             warehouse_id=warehouse_id,
             product_id=product_id,
@@ -79,6 +60,4 @@ class WarehouseService:
             reference_id=reference_id,
             notes=notes
         )
-        db.add(movement)
-        await db.flush()
         return stock

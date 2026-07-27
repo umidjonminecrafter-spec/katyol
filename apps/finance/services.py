@@ -1,34 +1,16 @@
 from decimal import Decimal
-from typing import Dict, Any, List
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
-
+from django.db import models
 from apps.sales.models import Sale
 from apps.production.models import ProductionBatch
-from apps.products.models import Product
 from apps.warehouse.models import WarehouseStock
 
 class FinanceService:
     @staticmethod
-    async def get_dashboard_summary(db: AsyncSession) -> Dict[str, Any]:
-        rev_res = await db.execute(select(func.sum(Sale.total_amount)))
-        total_rev = rev_res.scalar() or Decimal("0.00")
-
-        active_orders_res = await db.execute(select(func.count()).select_from(Sale).where(Sale.delivery_status != "DELIVERED"))
-        active_orders = active_orders_res.scalar() or 0
-
-        completed_boilers_res = await db.execute(
-            select(func.sum(ProductionBatch.completed_quantity)).where(ProductionBatch.status == "COMPLETED")
-        )
-        completed_boilers = completed_boilers_res.scalar() or 0
-
-        low_stock_res = await db.execute(
-            select(func.count()).select_from(WarehouseStock).join(Product, Product.id == WarehouseStock.product_id).where(
-                WarehouseStock.quantity <= Product.min_stock_level
-            )
-        )
-        low_stock_count = low_stock_res.scalar() or 0
+    def get_dashboard_summary():
+        total_rev = Sale.objects.aggregate(total=models.Sum('total_amount'))['total'] or Decimal("0.00")
+        active_orders = Sale.objects.exclude(delivery_status="DELIVERED").count()
+        completed_boilers = ProductionBatch.objects.filter(status="COMPLETED").aggregate(total=models.Sum('completed_quantity'))['total'] or 0
+        low_stock_count = WarehouseStock.objects.filter(quantity__lte=models.F('product__min_stock_level')).count()
 
         return {
             "monthly_revenue": float(total_rev) if total_rev > 0 else 450000.00,
@@ -39,7 +21,7 @@ class FinanceService:
         }
 
     @staticmethod
-    async def get_dashboard_charts(db: AsyncSession) -> List[Dict[str, Any]]:
+    def get_dashboard_charts():
         return [
             {"label": "Yanvar", "sales": 320000.00, "production": 30},
             {"label": "Fevral", "sales": 380000.00, "production": 35},

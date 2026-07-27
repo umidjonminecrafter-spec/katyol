@@ -1,60 +1,77 @@
-from sqlalchemy import Column, String, ForeignKey
-from sqlalchemy.orm import relationship
+from django.db import models
 from core.base_model import BaseModel
 
-class Organization(BaseModel):
-    __tablename__ = "organizations"
 
-    name = Column(String(255), nullable=False)
-    description = Column(String(500), nullable=True)
+class Organization(BaseModel):
+    name = models.CharField(max_length=255)
+    description = models.CharField(max_length=500, null=True, blank=True)
+
+    class Meta:
+        db_table = 'organizations'
+
 
 class Branch(BaseModel):
-    __tablename__ = "branches"
+    organization = models.ForeignKey('Organization', on_delete=models.CASCADE, db_column='organization_id', related_name='branches')
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=50)
+    address = models.CharField(max_length=255, null=True, blank=True)
+    phone = models.CharField(max_length=50, null=True, blank=True)
 
-    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String(255), nullable=False)
-    code = Column(String(50), nullable=False)
-    address = Column(String(255), nullable=True)
-    phone = Column(String(50), nullable=True)
+    class Meta:
+        db_table = 'branches'
 
-class User(BaseModel):
-    __tablename__ = "users"
-
-    username = Column(String(100), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(255), nullable=False)
-    phone = Column(String(50), nullable=True)
-    role = Column(String(50), nullable=False, default="EMPLOYEE")
-    position_id = Column(String(36), ForeignKey("positions.id"), nullable=True)
-    department = Column(String(100), nullable=True)
-    organization_name = Column(String(255), nullable=True)
-    branch_name = Column(String(255), nullable=True)
-    
-    # Proper relations for multi-branch switching
-    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
-    branch_id = Column(String(36), ForeignKey("branches.id", ondelete="SET NULL"), nullable=True)
-
-    salary_amount = Column(String(50), nullable=True)
-    salary_type_id = Column(String(36), nullable=True)
-    hire_date = Column(String(50), nullable=True)
-
-    position = relationship("Position", back_populates="users", lazy="selectin")
 
 class Position(BaseModel):
-    __tablename__ = "positions"
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.CharField(max_length=500, null=True, blank=True)
+    permissions = models.CharField(max_length=2000, null=True, blank=True)
 
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    description = Column(String(500), nullable=True)
-    permissions = Column(String(2000), nullable=True)
+    class Meta:
+        db_table = 'positions'
 
-    users = relationship("User", back_populates="position")
+
+class User(BaseModel):
+    username = models.CharField(max_length=100, unique=True, db_index=True)
+    hashed_password = models.CharField(max_length=255)
+    full_name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, null=True, blank=True)
+    role = models.CharField(max_length=50, default='EMPLOYEE')
+    position = models.ForeignKey('Position', on_delete=models.SET_NULL, null=True, blank=True,
+                                 db_column='position_id', related_name='users')
+    department = models.CharField(max_length=100, null=True, blank=True)
+    organization_name = models.CharField(max_length=255, null=True, blank=True)
+    branch_name = models.CharField(max_length=255, null=True, blank=True)
+
+    # Proper relations for multi-branch switching
+    organization = models.ForeignKey('Organization', on_delete=models.SET_NULL, null=True, blank=True,
+                                     db_column='organization_id_fk', related_name='users')
+    branch = models.ForeignKey('Branch', on_delete=models.SET_NULL, null=True, blank=True,
+                               db_column='branch_id_fk', related_name='users')
+
+    salary_amount = models.CharField(max_length=50, null=True, blank=True)
+    salary_type_id = models.CharField(max_length=36, null=True, blank=True)
+    hire_date = models.CharField(max_length=50, null=True, blank=True)
+
+    class Meta:
+        db_table = 'users'
+
+    # Non-persisted field set by authentication
+    @property
+    def is_anonymous(self):
+        return False
+
+    @property
+    def is_authenticated(self):
+        return True
+
 
 class UserSession(BaseModel):
-    __tablename__ = "user_sessions"
+    user = models.ForeignKey('User', on_delete=models.CASCADE, db_column='user_id', related_name='sessions')
+    refresh_token = models.CharField(max_length=500, db_index=True)
+    user_agent = models.CharField(max_length=500, null=True, blank=True)
+    ip_address = models.CharField(max_length=45, null=True, blank=True)
+    expires_at = models.CharField(max_length=100)
 
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    refresh_token = Column(String(500), nullable=False, index=True)
-    user_agent = Column(String(500), nullable=True)
-    ip_address = Column(String(45), nullable=True)
-    expires_at = Column(String(100), nullable=False)
+    class Meta:
+        db_table = 'user_sessions'

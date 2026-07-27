@@ -1,8 +1,6 @@
-from core.routing import path, create_router
+from django.urls import re_path
 from apps.warehouse import views
 
 urlpatterns = [
-    path("/stock", views.get_warehouse_stock_view, methods=["GET"], summary="Get warehouse stock levels"),
+    re_path(r'^/stock/?$', views.get_warehouse_stock_view),
 ]
-
-router = create_router(urlpatterns)

@@ -1,0 +1,62 @@
+from rest_framework import serializers
+
+class MasterDataCreateSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField(required=False, allow_null=True)
+    contact_name = serializers.CharField(required=False, allow_null=True)
+    phone = serializers.CharField(required=False, allow_null=True)
+    email = serializers.CharField(required=False, allow_null=True)
+    address = serializers.CharField(required=False, allow_null=True)
+    location = serializers.CharField(required=False, allow_null=True)
+    months = serializers.FloatField(required=False, allow_null=True)
+    symbol = serializers.CharField(required=False, allow_null=True)
+
+class MasterDataUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_null=True)
+    description = serializers.CharField(required=False, allow_null=True)
+    contact_name = serializers.CharField(required=False, allow_null=True)
+    phone = serializers.CharField(required=False, allow_null=True)
+    email = serializers.CharField(required=False, allow_null=True)
+    address = serializers.CharField(required=False, allow_null=True)
+    location = serializers.CharField(required=False, allow_null=True)
+    months = serializers.FloatField(required=False, allow_null=True)
+    symbol = serializers.CharField(required=False, allow_null=True)
+    status = serializers.CharField(required=False, allow_null=True)
+
+class MasterDataResponseSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_null=True, required=False)
+    contact_name = serializers.CharField(allow_null=True, required=False)
+    phone = serializers.CharField(allow_null=True, required=False)
+    email = serializers.CharField(allow_null=True, required=False)
+    address = serializers.CharField(allow_null=True, required=False)
+    location = serializers.CharField(allow_null=True, required=False)
+    months = serializers.FloatField(allow_null=True, required=False)
+    symbol = serializers.CharField(allow_null=True, required=False)
+    status = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+class CompanyUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=False, allow_null=True)
+    phone = serializers.CharField(required=False, allow_null=True)
+    website = serializers.CharField(required=False, allow_null=True)
+    address = serializers.CharField(required=False, allow_null=True)
+    description = serializers.CharField(required=False, allow_null=True)
+    currency = serializers.CharField(required=False, allow_null=True)
+    timezone = serializers.CharField(required=False, allow_null=True)
+    date_format = serializers.CharField(required=False, allow_null=True)
+
+class CompanyResponseSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    name = serializers.CharField()
+    phone = serializers.CharField(allow_null=True, required=False)
+    website = serializers.CharField(allow_null=True, required=False)
+    address = serializers.CharField(allow_null=True, required=False)
+    description = serializers.CharField(allow_null=True, required=False)
+    currency = serializers.CharField()
+    timezone = serializers.CharField()
+    date_format = serializers.CharField()

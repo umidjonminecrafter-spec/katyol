@@ -1,9 +1,4 @@
-from typing import Tuple, List, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-
 from core.exceptions import CustomAppException
-from core.base_repository import BaseRepository
 from core.safe_delete import SafeDeleteService
 from apps.master_data.models import (
     ProductCategory, MaterialType, Unit, Supplier, Customer,
@@ -34,59 +29,78 @@ class MasterDataService:
         return model
 
     @classmethod
-    async def get_multi(cls, db: AsyncSession, entity_key: str, include_archived: bool = False):
+    def get_multi(cls, entity_key: str, include_archived: bool = False):
         model = cls.get_model(entity_key)
-        repo = BaseRepository(model)
-        return await repo.get_multi(db, skip=0, limit=1000, include_archived=include_archived)
+        qs = model.objects.all()
+        if not include_archived:
+            qs = qs.exclude(status="ARCHIVED")
+        items = list(qs.order_by("-created_at")[:1000])
+        total = qs.count()
+        return items, total
 
     @classmethod
-    async def create(cls, db: AsyncSession, entity_key: str, data: dict, created_by_id: str):
+    def create(cls, entity_key: str, data: dict, created_by_id: str):
         model = cls.get_model(entity_key)
-        repo = BaseRepository(model)
         if "code" in data:
-            existing = await db.execute(select(model).where(model.code == data["code"]))
-            if existing.scalars().first():
+            if model.objects.filter(code=data["code"]).exists():
                 raise CustomAppException(message=f"'{data['code']}' kodli master data allaqachon mavjud", error_code="DUPLICATE_CODE")
-        return await repo.create(db, data, created_by_id=created_by_id)
-
-    @classmethod
-    async def update(cls, db: AsyncSession, entity_key: str, item_id: str, data: dict, updated_by_id: str):
-        model = cls.get_model(entity_key)
-        repo = BaseRepository(model)
-        item = await repo.get_by_id(db, item_id)
-        if not item:
-            raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
-        return await repo.update(db, item, data, updated_by_id=updated_by_id)
-
-    @classmethod
-    async def archive(cls, db: AsyncSession, entity_key: str, item_id: str, updated_by_id: str):
-        model = cls.get_model(entity_key)
-        repo = BaseRepository(model)
-        item = await repo.get_by_id(db, item_id)
-        if not item:
-            raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
-        return await repo.soft_delete(db, item, updated_by_id=updated_by_id)
-
-    @classmethod
-    async def restore(cls, db: AsyncSession, entity_key: str, item_id: str, updated_by_id: str):
-        model = cls.get_model(entity_key)
-        repo = BaseRepository(model)
-        item = await repo.get_by_id(db, item_id)
-        if not item:
-            raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
-        item.status = "ACTIVE"
-        item.is_active = True
-        item.updated_by_id = updated_by_id
-        await db.flush()
+        if created_by_id and hasattr(model, "created_by_id"):
+            data["created_by_id"] = created_by_id
+        item = model.objects.create(**data)
         return item
 
     @classmethod
-    async def delete(cls, db: AsyncSession, entity_key: str, item_id: str):
+    def update(cls, entity_key: str, item_id: str, data: dict, updated_by_id: str):
         model = cls.get_model(entity_key)
-        repo = BaseRepository(model)
-        item = await repo.get_by_id(db, item_id)
-        if not item:
+        try:
+            item = model.objects.get(id=item_id)
+        except model.DoesNotExist:
             raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
         
-        await SafeDeleteService.check_entity_references(db, entity_key, item_id)
-        return await repo.hard_delete(db, item_id)
+        for k, v in data.items():
+            if hasattr(item, k) and v is not None:
+                setattr(item, k, v)
+        if updated_by_id and hasattr(item, "updated_by_id"):
+            item.updated_by_id = updated_by_id
+        item.save()
+        return item
+
+    @classmethod
+    def archive(cls, entity_key: str, item_id: str, updated_by_id: str):
+        model = cls.get_model(entity_key)
+        try:
+            item = model.objects.get(id=item_id)
+        except model.DoesNotExist:
+            raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
+        item.status = "ARCHIVED"
+        item.is_active = False
+        if updated_by_id and hasattr(item, "updated_by_id"):
+            item.updated_by_id = updated_by_id
+        item.save()
+        return item
+
+    @classmethod
+    def restore(cls, entity_key: str, item_id: str, updated_by_id: str):
+        model = cls.get_model(entity_key)
+        try:
+            item = model.objects.get(id=item_id)
+        except model.DoesNotExist:
+            raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
+        item.status = "ACTIVE"
+        item.is_active = True
+        if updated_by_id and hasattr(item, "updated_by_id"):
+            item.updated_by_id = updated_by_id
+        item.save()
+        return item
+
+    @classmethod
+    def delete(cls, entity_key: str, item_id: str):
+        model = cls.get_model(entity_key)
+        try:
+            item = model.objects.get(id=item_id)
+        except model.DoesNotExist:
+            raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
+
+        SafeDeleteService.check_entity_references(entity_key, item_id)
+        item.delete()
+        return True

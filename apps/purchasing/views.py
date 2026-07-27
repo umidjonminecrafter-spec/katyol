@@ -1,91 +1,68 @@
-from typing import Optional
-from fastapi import Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.database import get_db
-from core.dependencies import get_current_user, RequireRole
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated, require_roles
 from core.audit_helper import record_audit_log
-from apps.accounts.models import User
 from apps.purchasing.services import PurchaseService
-from apps.purchasing.schemas import PurchaseCreate, PurchaseUpdateStatus, PurchaseResponse, PurchaseItemResponse
+from apps.purchasing.serializers import PurchaseCreateSerializer, PurchaseUpdateStatusSerializer, PurchaseResponseSerializer
 
-async def list_purchases_view(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    items, total = await PurchaseService.get_multi(db, page=page, limit=limit, status=status_filter)
-    total_pages = (total + limit - 1) // limit if limit > 0 else 1
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def purchases_list_create_view(request):
+    if request.method == 'GET':
+        page = int(request.query_params.get('page', 1))
+        limit = int(request.query_params.get('limit', 20))
+        status_filter = request.query_params.get('status')
 
-    response_items = []
-    for p in items:
-        resp = PurchaseResponse.model_validate(p)
-        if p.supplier:
-            resp.supplier_name = p.supplier.name
-        if p.warehouse:
-            resp.warehouse_name = p.warehouse.name
-        
-        items_resp = []
-        for item in p.items:
-            i_resp = PurchaseItemResponse.model_validate(item)
-            if item.product:
-                i_resp.product_code = item.product.code
-                i_resp.product_name = item.product.name
-            items_resp.append(i_resp)
-        resp.items = items_resp
-        response_items.append(resp)
+        items, total = PurchaseService.get_multi(page=page, limit=limit, status=status_filter)
+        total_pages = (total + limit - 1) // limit if limit > 0 else 1
 
-    return {
-        "success": True,
-        "data": response_items,
-        "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
-    }
+        response_items = PurchaseResponseSerializer(items, many=True).data
 
-async def create_purchase_view(
-    request: Request,
-    body: PurchaseCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER", "ACCOUNTANT", "WAREHOUSE_KEEPER"]))
-):
-    p = await PurchaseService.create_purchase(db, body.model_dump(), created_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
+        return Response({
+            "success": True,
+            "data": response_items,
+            "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
+        })
+
+    # POST (create)
+    if request.user.role not in ["ADMIN", "MANAGER", "ACCOUNTANT", "WAREHOUSE_KEEPER"]:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = PurchaseCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+
+    p = PurchaseService.create_purchase(body_data, created_by_id=request.user.id)
+    record_audit_log(
         action="CREATE",
         entity_name="PURCHASE",
         entity_id=p.id,
-        actor_id=current_user.id,
-        new_values=body.model_dump(),
+        actor_id=request.user.id,
+        new_values=body_data,
         request=request
     )
-    resp = PurchaseResponse.model_validate(p)
-    if p.supplier:
-        resp.supplier_name = p.supplier.name
-    if p.warehouse:
-        resp.warehouse_name = p.warehouse.name
-    return {"success": True, "data": resp}
+    return Response({"success": True, "data": PurchaseResponseSerializer(p).data}, status=201)
 
-async def update_purchase_status_view(
-    id: str,
-    request: Request,
-    body: PurchaseUpdateStatus,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER", "ACCOUNTANT", "WAREHOUSE_KEEPER"]))
-):
-    p = await PurchaseService.update_status(db, id, body.status, updated_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
+@api_view(['PUT'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def update_purchase_status_view(request, id):
+    if request.user.role not in ["ADMIN", "MANAGER", "ACCOUNTANT", "WAREHOUSE_KEEPER"]:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = PurchaseUpdateStatusSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    new_status = serializer.validated_data["status"]
+
+    p = PurchaseService.update_status(id, new_status, updated_by_id=request.user.id)
+    record_audit_log(
         action="UPDATE_STATUS",
         entity_name="PURCHASE",
         entity_id=id,
-        actor_id=current_user.id,
-        new_values={"status": body.status},
+        actor_id=request.user.id,
+        new_values={"status": new_status},
         request=request
     )
-    resp = PurchaseResponse.model_validate(p)
-    if p.supplier:
-        resp.supplier_name = p.supplier.name
-    if p.warehouse:
-        resp.warehouse_name = p.warehouse.name
-    return {"success": True, "data": resp}
+    return Response({"success": True, "data": PurchaseResponseSerializer(p).data})

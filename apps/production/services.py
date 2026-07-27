@@ -1,20 +1,14 @@
-from typing import List, Tuple, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import func
-
 from core.exceptions import CustomAppException
 from apps.production.models import ProductionBatch
 
 class ProductionService:
     @staticmethod
-    async def create_batch(db: AsyncSession, data: dict, created_by_id: str) -> ProductionBatch:
+    def create_batch(data: dict, created_by_id: str) -> ProductionBatch:
         b_num = data.get("batch_number")
-        existing = await db.execute(select(ProductionBatch).where(ProductionBatch.batch_number == b_num))
-        if existing.scalars().first():
+        if ProductionBatch.objects.filter(batch_number=b_num).exists():
             raise CustomAppException(message=f"'{b_num}' raqamli ishlab chiqarish partiyasi allaqachon mavjud", error_code="DUPLICATE_BATCH_NUMBER")
 
-        batch = ProductionBatch(
+        batch = ProductionBatch.objects.create(
             batch_number=b_num,
             boiler_id=data["boiler_id"],
             target_quantity=data["target_quantity"],
@@ -25,15 +19,13 @@ class ProductionService:
             status="PLANNED",
             created_by_id=created_by_id
         )
-        db.add(batch)
-        await db.flush()
         return batch
 
     @staticmethod
-    async def update_batch(db: AsyncSession, batch_id: str, data: dict, updated_by_id: str) -> ProductionBatch:
-        res = await db.execute(select(ProductionBatch).where(ProductionBatch.id == batch_id))
-        batch = res.scalars().first()
-        if not batch:
+    def update_batch(batch_id: str, data: dict, updated_by_id: str) -> ProductionBatch:
+        try:
+            batch = ProductionBatch.objects.get(id=batch_id)
+        except ProductionBatch.DoesNotExist:
             raise CustomAppException(message="Ishlab chiqarish partiyasi topilmadi", status_code=404)
 
         for field, value in data.items():
@@ -41,29 +33,23 @@ class ProductionService:
                 setattr(batch, field, value)
 
         batch.updated_by_id = updated_by_id
-        await db.flush()
+        batch.save()
         return batch
 
     @staticmethod
-    async def get_multi(
-        db: AsyncSession,
+    def get_multi(
         page: int = 1,
         limit: int = 20,
-        status: Optional[str] = None
-    ) -> Tuple[List[ProductionBatch], int]:
-        query = select(ProductionBatch)
-        count_query = select(func.count()).select_from(ProductionBatch)
+        status: str = None
+    ):
+        qs = ProductionBatch.objects.all()
 
         if status:
-            query = query.where(ProductionBatch.status == status)
-            count_query = count_query.where(ProductionBatch.status == status)
+            qs = qs.filter(status=status)
 
-        total_res = await db.execute(count_query)
-        total = total_res.scalar() or 0
+        total = qs.count()
 
         skip = (page - 1) * limit
-        query = query.order_by(ProductionBatch.created_at.desc()).offset(skip).limit(limit)
-        res = await db.execute(query)
-        items = list(res.scalars().all())
+        items = list(qs.order_by('-created_at')[skip:skip + limit])
 
         return items, total

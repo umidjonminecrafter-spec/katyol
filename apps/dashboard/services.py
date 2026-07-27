@@ -1,11 +1,10 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from apps.finance.services import FinanceService
 
 class DashboardService:
     @staticmethod
-    async def get_summary(db: AsyncSession):
-        return await FinanceService.get_dashboard_summary(db)
+    def get_summary():
+        return FinanceService.get_dashboard_summary()
 
     @staticmethod
-    async def get_charts(db: AsyncSession):
-        return await FinanceService.get_dashboard_charts(db)
+    def get_charts():
+        return FinanceService.get_dashboard_charts()

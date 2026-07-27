@@ -1,249 +1,260 @@
-from fastapi import Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+import json
+from django.db.models import Sum, Count
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
 
-from core.database import get_db
-from core.dependencies import get_current_user
-from apps.accounts.models import User
-from apps.accounts.schemas import LoginRequest, LoginResponse, RefreshRequest, RefreshResponse, UserProfileResponse, UserInfo, RegisterRequest, UserCreate
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated
+from core.exceptions import CustomAppException
+from apps.accounts.models import User, Branch, Organization, Position
+from apps.accounts.serializers import (
+    LoginRequestSerializer, RegisterRequestSerializer, UserCreateSerializer,
+    UserInfoSerializer, RefreshRequestSerializer, BranchCreateSerializer,
+    BranchResponseSerializer, PositionCreateSerializer, PositionResponseSerializer,
+)
 from apps.accounts.services import AuthService
 
-async def register_view(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    user = await AuthService.register_user(db, body)
-    return {"success": True, "data": UserInfo.model_validate(user)}
 
-async def list_employees_view(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    users = await AuthService.list_employees(db, current_user)
-    return {"success": True, "data": [UserInfo.model_validate(u) for u in users]}
+def _user_info(user):
+    return UserInfoSerializer(user).data
 
-async def create_employee_view(body: UserCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    user = await AuthService.create_employee_user(db, body, current_user)
-    return {"success": True, "data": UserInfo.model_validate(user)}
 
-async def login_view(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    token_data = await AuthService.authenticate_user(db, body, request)
-    return LoginResponse(success=True, data=token_data)
+@api_view(['POST'])
+def register_view(request):
+    serializer = RegisterRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    user = AuthService.register_user(serializer.validated_data, request=request)
+    return Response({'success': True, 'data': _user_info(user)})
 
-async def refresh_token_view(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    access_token = await AuthService.refresh_access_token(db, body.refresh_token)
-    return RefreshResponse(access_token=access_token, token_type="bearer")
 
-async def get_me_view(current_user: User = Depends(get_current_user)):
-    user_info = UserInfo.model_validate(current_user)
-    
-    permissions = []
-    if current_user.position and current_user.position.permissions:
-        import json
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def list_employees_view(request):
+    users = AuthService.list_employees(request.user)
+    return Response({'success': True, 'data': [_user_info(u) for u in users]})
+
+
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def create_employee_view(request):
+    serializer = UserCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    user = AuthService.create_employee_user(serializer.validated_data, request.user)
+    return Response({'success': True, 'data': _user_info(user)})
+
+
+@api_view(['POST'])
+def login_view(request):
+    serializer = LoginRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    result = AuthService.authenticate_user(serializer.validated_data, request=request)
+    return Response({
+        'success': True,
+        'data': {
+            'access_token': result['access_token'],
+            'refresh_token': result['refresh_token'],
+            'token_type': result['token_type'],
+            'user': _user_info(result['user']),
+        },
+    })
+
+
+@api_view(['POST'])
+def refresh_token_view(request):
+    serializer = RefreshRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    access_token = AuthService.refresh_access_token(serializer.validated_data['refresh_token'])
+    return Response({'access_token': access_token, 'token_type': 'bearer'})
+
+
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_me_view(request):
+    user_info = _user_info(request.user)
+
+    permissions_list = []
+    if request.user.position and request.user.position.permissions:
         try:
-            permissions = json.loads(current_user.position.permissions)
+            permissions_list = json.loads(request.user.position.permissions)
         except Exception:
-            permissions = current_user.position.permissions.split(",")
+            permissions_list = request.user.position.permissions.split(',')
 
-    if not permissions:
-        if current_user.role in ["ADMIN", "SUPER_ADMIN"]:
-            permissions = ["*"]
-        elif current_user.role == "PRODUCTION_OPERATOR":
-            permissions = ["PRODUCTION_VIEW", "PRODUCTION_EDIT"]
-        elif current_user.role == "WAREHOUSE_KEEPER":
-            permissions = ["WAREHOUSE_VIEW", "WAREHOUSE_EDIT"]
+    if not permissions_list:
+        if request.user.role in ['ADMIN', 'SUPER_ADMIN']:
+            permissions_list = ['*']
+        elif request.user.role == 'PRODUCTION_OPERATOR':
+            permissions_list = ['PRODUCTION_VIEW', 'PRODUCTION_EDIT']
+        elif request.user.role == 'WAREHOUSE_KEEPER':
+            permissions_list = ['WAREHOUSE_VIEW', 'WAREHOUSE_EDIT']
         else:
-            permissions = ["PRODUCTION_VIEW", "WAREHOUSE_VIEW", "SALES_VIEW"]
-    
-    return UserProfileResponse(user=user_info, permissions=permissions)
+            permissions_list = ['PRODUCTION_VIEW', 'WAREHOUSE_VIEW', 'SALES_VIEW']
+
+    return Response({'user': user_info, 'permissions': permissions_list})
+
 
 # Branch management views
-from apps.accounts.models import Branch, Organization
-from apps.accounts.schemas import BranchCreate, BranchResponse
-from sqlalchemy.future import select
-from sqlalchemy import func
 
-async def list_branches_view(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if not current_user.organization_id:
-        return {"success": True, "data": []}
-    result = await db.execute(
-        select(Branch).where(Branch.organization_id == current_user.organization_id)
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def list_branches_view(request):
+    if not request.user.organization_id:
+        return Response({'success': True, 'data': []})
+    branches = Branch.objects.filter(organization_id=request.user.organization_id)
+    return Response({'success': True, 'data': BranchResponseSerializer(branches, many=True).data})
+
+
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def create_branch_view(request):
+    if not request.user.organization_id:
+        raise CustomAppException(message='Foydalanuvchi tashkilotga biriktirilmagan', status_code=400)
+    serializer = BranchCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    d = serializer.validated_data
+    branch = Branch.objects.create(
+        organization_id=request.user.organization_id,
+        name=d['name'],
+        code=d['code'],
+        address=d.get('address'),
+        phone=d.get('phone'),
     )
-    branches = result.scalars().all()
-    return {"success": True, "data": [BranchResponse.model_validate(b) for b in branches]}
+    return Response({'success': True, 'data': BranchResponseSerializer(branch).data})
 
-async def create_branch_view(
-    body: BranchCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    if not current_user.organization_id:
-        raise HTTPException(status_code=400, detail="Foydalanuvchi tashkilotga biriktirilmagan")
-    
-    branch = Branch(
-        organization_id=current_user.organization_id,
-        name=body.name,
-        code=body.code,
-        address=body.address,
-        phone=body.phone
-    )
-    db.add(branch)
-    await db.flush()
-    await db.commit()
-    return {"success": True, "data": BranchResponse.model_validate(branch)}
 
-async def update_branch_view(
-    id: str,
-    body: BranchCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    result = await db.execute(
-        select(Branch).where(Branch.id == id, Branch.organization_id == current_user.organization_id)
-    )
-    branch = result.scalars().first()
-    if not branch:
-        raise HTTPException(status_code=404, detail="Filial topilmadi")
-    
-    branch.name = body.name
-    branch.code = body.code
-    branch.address = body.address
-    branch.phone = body.phone
-    
-    await db.flush()
-    await db.commit()
-    return {"success": True, "data": BranchResponse.model_validate(branch)}
+@api_view(['PUT'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def update_branch_view(request, id):
+    try:
+        branch = Branch.objects.get(id=id, organization_id=request.user.organization_id)
+    except Branch.DoesNotExist:
+        raise CustomAppException(message='Filial topilmadi', status_code=404)
+    serializer = BranchCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    d = serializer.validated_data
+    branch.name = d['name']
+    branch.code = d['code']
+    branch.address = d.get('address')
+    branch.phone = d.get('phone')
+    branch.save()
+    return Response({'success': True, 'data': BranchResponseSerializer(branch).data})
 
-async def delete_branch_view(
-    id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    result = await db.execute(
-        select(Branch).where(Branch.id == id, Branch.organization_id == current_user.organization_id)
-    )
-    branch = result.scalars().first()
-    if not branch:
-        raise HTTPException(status_code=404, detail="Filial topilmadi")
-    
-    branch.status = "ARCHIVED"
-    await db.flush()
-    await db.commit()
-    return {"success": True, "message": "Filial muvaffaqiyatli arxivlandi"}
 
-async def get_branch_stats_view(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+@api_view(['DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def delete_branch_view(request, id):
+    try:
+        branch = Branch.objects.get(id=id, organization_id=request.user.organization_id)
+    except Branch.DoesNotExist:
+        raise CustomAppException(message='Filial topilmadi', status_code=404)
+    branch.status = 'ARCHIVED'
+    branch.save()
+    return Response({'success': True, 'message': 'Filial muvaffaqiyatli arxivlandi'})
+
+
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_branch_stats_view(request):
     from apps.sales.models import Sale
     from apps.production.models import ProductionBatch
     from apps.warehouse.models import WarehouseStock
 
-    if not current_user.organization_id:
-        return {"success": True, "data": []}
+    if not request.user.organization_id:
+        return Response({'success': True, 'data': []})
 
-    result = await db.execute(
-        select(Branch).where(Branch.organization_id == current_user.organization_id, Branch.status == "ACTIVE")
-    )
-    branches = result.scalars().all()
-
+    branches = Branch.objects.filter(organization_id=request.user.organization_id, status='ACTIVE')
     stats = []
     for b in branches:
-        # Sum sales revenue
-        sales_rev_res = await db.execute(
-            select(func.sum(Sale.total_amount)).where(Sale.branch_id == b.id)
-        )
-        sales_rev = sales_rev_res.scalar() or 0
-
-        # Sales count
-        sales_cnt_res = await db.execute(
-            select(func.count(Sale.id)).where(Sale.branch_id == b.id)
-        )
-        sales_cnt = sales_cnt_res.scalar() or 0
-
-        # Production count
-        prod_cnt_res = await db.execute(
-            select(func.sum(ProductionBatch.completed_quantity)).where(ProductionBatch.branch_id == b.id)
-        )
-        prod_cnt = prod_cnt_res.scalar() or 0
-
-        # Total warehouse stock
-        stock_res = await db.execute(
-            select(func.sum(WarehouseStock.quantity)).where(WarehouseStock.branch_id == b.id)
-        )
-        stock_cnt = stock_res.scalar() or 0
+        sales_rev = Sale.objects.filter(branch_id=b.id).aggregate(total=Sum('total_amount'))['total'] or 0
+        sales_cnt = Sale.objects.filter(branch_id=b.id).count()
+        prod_cnt = ProductionBatch.objects.filter(branch_id=b.id).aggregate(total=Sum('completed_quantity'))['total'] or 0
+        stock_cnt = WarehouseStock.objects.filter(branch_id=b.id).aggregate(total=Sum('quantity'))['total'] or 0
 
         stats.append({
-            "id": b.id,
-            "name": b.name,
-            "code": b.code,
-            "revenue": float(sales_rev),
-            "salesCount": int(sales_cnt),
-            "productionVolume": int(prod_cnt),
-            "stockVolume": float(stock_cnt)
+            'id': b.id,
+            'name': b.name,
+            'code': b.code,
+            'revenue': float(sales_rev),
+            'salesCount': int(sales_cnt),
+            'productionVolume': int(prod_cnt),
+            'stockVolume': float(stock_cnt),
         })
 
-    return {"success": True, "data": stats}
+    return Response({'success': True, 'data': stats})
+
 
 # Position CRUD views
-from apps.accounts.models import Position
-from apps.accounts.schemas import PositionCreate, PositionResponse
 
-async def list_positions_view(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    result = await db.execute(select(Position).where(Position.status != "ARCHIVED"))
-    positions = result.scalars().all()
-    return {"success": True, "data": [PositionResponse.model_validate(p) for p in positions]}
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def list_positions_view(request):
+    positions = Position.objects.exclude(status='ARCHIVED')
+    return Response({'success': True, 'data': PositionResponseSerializer(positions, many=True).data})
 
-async def create_position_view(
-    body: PositionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Auto-generate code from name
-    code = body.name.strip().upper().replace(" ", "-")
-    import uuid
-    position = Position(
+
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def create_position_view(request):
+    serializer = PositionCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    d = serializer.validated_data
+    code = d['name'].strip().upper().replace(' ', '-')
+    position = Position.objects.create(
         code=f"{code}-{str(uuid.uuid4())[:4]}",
-        name=body.name,
-        description=body.description,
-        permissions=body.permissions,
-        status="ACTIVE"
+        name=d['name'],
+        description=d.get('description'),
+        permissions=d.get('permissions'),
+        status='ACTIVE',
     )
-    db.add(position)
-    await db.flush()
-    await db.commit()
-    return {"success": True, "data": PositionResponse.model_validate(position), "message": "Yangi lavozim muvaffaqiyatli saqlandi."}
+    return Response({
+        'success': True,
+        'data': PositionResponseSerializer(position).data,
+        'message': 'Yangi lavozim muvaffaqiyatli saqlandi.',
+    })
 
-async def update_position_view(
-    id: str,
-    body: PositionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    result = await db.execute(select(Position).where(Position.id == id))
-    position = result.scalars().first()
-    if not position:
-        raise HTTPException(status_code=404, detail="Lavozim topilmadi")
-    
-    position.name = body.name
-    position.description = body.description
-    if body.permissions is not None:
-        position.permissions = body.permissions
-    
-    await db.flush()
-    await db.commit()
-    return {"success": True, "data": PositionResponse.model_validate(position), "message": "Lavozim muvaffaqiyatli tahrirlandi."}
 
-async def delete_position_view(
-    id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    result = await db.execute(select(Position).where(Position.id == id))
-    position = result.scalars().first()
-    if not position:
-        raise HTTPException(status_code=404, detail="Lavozim topilmadi")
-    
-    position.status = "ARCHIVED"
-    await db.flush()
-    await db.commit()
-    return {"success": True, "message": "Lavozim muvaffaqiyatli o'chirildi."}
+@api_view(['PUT'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def update_position_view(request, id):
+    try:
+        position = Position.objects.get(id=id)
+    except Position.DoesNotExist:
+        raise CustomAppException(message='Lavozim topilmadi', status_code=404)
+    serializer = PositionCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    d = serializer.validated_data
+    position.name = d['name']
+    position.description = d.get('description')
+    if d.get('permissions') is not None:
+        position.permissions = d['permissions']
+    position.save()
+    return Response({
+        'success': True,
+        'data': PositionResponseSerializer(position).data,
+        'message': 'Lavozim muvaffaqiyatli tahrirlandi.',
+    })
+
+
+@api_view(['DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def delete_position_view(request, id):
+    try:
+        position = Position.objects.get(id=id)
+    except Position.DoesNotExist:
+        raise CustomAppException(message='Lavozim topilmadi', status_code=404)
+    position.status = 'ARCHIVED'
+    position.save()
+    return Response({'success': True, 'message': "Lavozim muvaffaqiyatli o'chirildi."})

@@ -1,161 +1,146 @@
-from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from fastapi import HTTPException, status, Request
-
 from core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
 from core.audit_helper import record_audit_log
+from core.exceptions import CustomAppException
 from apps.accounts.models import User, Organization, Branch
-from apps.accounts.schemas import RegisterRequest, UserCreate, LoginRequest, TokenData, UserInfo
+from rest_framework import status
+
 
 class AuthService:
     @staticmethod
-    async def register_user(db: AsyncSession, body: RegisterRequest) -> User:
-        existing_res = await db.execute(select(User).where(User.username == body.phone))
-        if existing_res.scalars().first():
-            raise HTTPException(
+    def register_user(data, request=None):
+        if User.objects.filter(username=data['phone']).exists():
+            raise CustomAppException(
+                message='Ushbu telefon raqami bilan foydalanuvchi allaqachon mavjud',
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ushbu telefon raqami bilan foydalanuvchi allaqachon mavjud"
             )
-        
+
         # 1. Create Organization
-        org = Organization(name=body.organization_name)
-        db.add(org)
-        await db.flush()
+        org = Organization.objects.create(name=data['organization_name'])
 
         # 2. Create default Branch
-        branch = Branch(
-            organization_id=org.id,
-            name=body.branch_name,
-            code="MAIN-BRANCH"
+        branch = Branch.objects.create(
+            organization=org,
+            name=data['branch_name'],
+            code='MAIN-BRANCH',
         )
-        db.add(branch)
-        await db.flush()
 
         # 3. Create Admin User linked to organization & branch
-        user = User(
-            username=body.phone,
-            hashed_password=get_password_hash(body.password),
-            full_name=body.full_name,
-            phone=body.phone,
-            role="ADMIN",
-            organization_name=body.organization_name,
-            branch_name=body.branch_name,
-            organization_id=org.id,
-            branch_id=branch.id,
-            status="ACTIVE"
+        user = User.objects.create(
+            username=data['phone'],
+            hashed_password=get_password_hash(data['password']),
+            full_name=data['full_name'],
+            phone=data['phone'],
+            role='ADMIN',
+            organization_name=data['organization_name'],
+            branch_name=data['branch_name'],
+            organization=org,
+            branch=branch,
+            status='ACTIVE',
         )
-        db.add(user)
-        
-        from apps.master_data.models import Company
-        company_res = await db.execute(select(Company))
-        company = company_res.scalars().first()
-        if not company:
-            company = Company(
-                name=body.organization_name,
-                phone=body.phone,
-                currency=body.currency,
-                timezone="Asia/Tashkent (UTC+5)",
-                date_format="YYYY-MM-DD"
-            )
-            db.add(company)
-        else:
-            company.name = body.organization_name
-            company.phone = body.phone
-            company.currency = body.currency
 
-        await db.flush()
-        await db.commit()
+        from apps.master_data.models import Company
+        company = Company.objects.first()
+        if not company:
+            Company.objects.create(
+                name=data['organization_name'],
+                phone=data['phone'],
+                currency=data.get('currency', 'USD'),
+                timezone='Asia/Tashkent (UTC+5)',
+                date_format='YYYY-MM-DD',
+            )
+        else:
+            company.name = data['organization_name']
+            company.phone = data['phone']
+            company.currency = data.get('currency', 'USD')
+            company.save()
+
         return user
 
     @staticmethod
-    async def create_employee_user(db: AsyncSession, body: UserCreate, creator: User) -> User:
-        existing_res = await db.execute(select(User).where(User.username == body.phone))
-        if existing_res.scalars().first():
-            raise HTTPException(
+    def create_employee_user(data, creator):
+        if User.objects.filter(username=data['phone']).exists():
+            raise CustomAppException(
+                message='Ushbu telefon raqami bilan foydalanuvchi allaqachon mavjud',
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ushbu telefon raqami bilan foydalanuvchi allaqachon mavjud"
             )
-        
-        user = User(
-            username=body.phone,
-            hashed_password=get_password_hash(body.password),
-            full_name=body.full_name,
-            phone=body.phone,
-            role=body.role,
-            position_id=body.position_id,
-            department=body.department,
+
+        user = User.objects.create(
+            username=data['phone'],
+            hashed_password=get_password_hash(data['password']),
+            full_name=data['full_name'],
+            phone=data['phone'],
+            role=data.get('role', 'EMPLOYEE'),
+            position_id=data.get('position_id'),
+            department=data.get('department'),
             organization_name=creator.organization_name,
             branch_name=creator.branch_name,
-            organization_id=creator.organization_id,
-            branch_id=creator.branch_id,
-            status="ACTIVE"
+            organization=creator.organization,
+            branch=creator.branch,
+            status='ACTIVE',
         )
-        db.add(user)
-        await db.flush()
-        await db.commit()
         return user
 
     @staticmethod
-    async def list_employees(db: AsyncSession, creator: User):
-        result = await db.execute(
-            select(User).where(
-                User.organization_name == creator.organization_name,
-                User.branch_name == creator.branch_name
-            )
-        )
-        return list(result.scalars().all())
+    def list_employees(creator):
+        return list(User.objects.filter(
+            organization_name=creator.organization_name,
+            branch_name=creator.branch_name,
+        ))
 
     @staticmethod
-    async def authenticate_user(db: AsyncSession, body: LoginRequest, request: Request) -> TokenData:
-        result = await db.execute(select(User).where(User.username == body.username, User.status == "ACTIVE"))
-        user = result.scalars().first()
-        
-        if not user:
-            raise HTTPException(
+    def authenticate_user(data, request=None):
+        try:
+            user = User.objects.get(username=data['username'], status='ACTIVE')
+        except User.DoesNotExist:
+            raise CustomAppException(
+                message='USER_NOT_FOUND',
+                error_code='NOT_FOUND',
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="USER_NOT_FOUND"
             )
-        
-        if not verify_password(body.password, user.hashed_password):
-            raise HTTPException(
+
+        if not verify_password(data['password'], user.hashed_password):
+            raise CustomAppException(
+                message="Noto'g'ri parol",
+                error_code='UNAUTHORIZED',
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Noto'g'ri parol"
             )
 
         access_token = create_access_token(subject=user.id, role=user.role)
         refresh_token = create_refresh_token(subject=user.id)
 
-        await record_audit_log(
-            db=db,
-            action="LOGIN",
-            entity_name="USER",
+        record_audit_log(
+            action='LOGIN',
+            entity_name='USER',
             entity_id=user.id,
             actor_id=user.id,
-            request=request
+            request=request,
         )
 
-        user_info = UserInfo.model_validate(user)
-        return TokenData(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            token_type="bearer",
-            user=user_info
-        )
+        return {
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'token_type': 'bearer',
+            'user': user,
+        }
 
     @staticmethod
-    async def refresh_access_token(db: AsyncSession, refresh_token: str) -> str:
-        payload = decode_token(refresh_token)
-        if not payload or payload.get("type") != "refresh":
-            raise HTTPException(
+    def refresh_access_token(refresh_token_str):
+        payload = decode_token(refresh_token_str)
+        if not payload or payload.get('type') != 'refresh':
+            raise CustomAppException(
+                message='Yaroqsiz refresh token',
+                error_code='UNAUTHORIZED',
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Yaroqsiz refresh token"
             )
-        
-        user_id = payload.get("sub")
-        result = await db.execute(select(User).where(User.id == user_id, User.status == "ACTIVE"))
-        user = result.scalars().first()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Foydalanuvchi topilmadi")
+
+        user_id = payload.get('sub')
+        try:
+            user = User.objects.get(id=user_id, status='ACTIVE')
+        except User.DoesNotExist:
+            raise CustomAppException(
+                message='Foydalanuvchi topilmadi',
+                error_code='UNAUTHORIZED',
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
 
         return create_access_token(subject=user.id, role=user.role)

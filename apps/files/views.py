@@ -1,27 +1,33 @@
 import os
 import uuid
 from datetime import datetime
-from fastapi import Depends, UploadFile, File, HTTPException, status
-from core.config import settings
-from core.dependencies import get_current_user
-from apps.accounts.models import User
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.conf import settings
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated
+from core.exceptions import CustomAppException
 
-async def upload_file_view(
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
-):
-    ext = os.path.splitext(file.filename)[1].lower()
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def upload_file_view(request):
+    if 'file' not in request.FILES:
+        raise CustomAppException(message="Fayl tanlanmagan", status_code=400)
+
+    uploaded_file = request.FILES['file']
+    ext = os.path.splitext(uploaded_file.name)[1].lower()
     if ext not in settings.ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Fayl formati qo'llab-quvvatlanmaydi. Ruxsat etilgan: {', '.join(settings.ALLOWED_EXTENSIONS)}"
+        raise CustomAppException(
+            message=f"Fayl formati qo'llab-quvvatlanmaydi. Ruxsat etilgan: {', '.join(settings.ALLOWED_EXTENSIONS)}",
+            status_code=400
         )
 
-    content = await file.read()
-    if len(content) > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Fayl hajmi {settings.MAX_FILE_SIZE_MB}MB dan oshmasligi kerak"
+    if uploaded_file.size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
+        raise CustomAppException(
+            message=f"Fayl hajmi {settings.MAX_FILE_SIZE_MB}MB dan oshmasligi kerak",
+            status_code=400
         )
 
     now = datetime.now()
@@ -34,17 +40,18 @@ async def upload_file_view(
     unique_filename = f"{uuid.uuid4()}{ext}"
     full_filepath = os.path.join(upload_path, unique_filename)
 
-    with open(full_filepath, "wb") as f:
-        f.write(content)
+    with open(full_filepath, "wb") as destination:
+        for chunk in uploaded_file.chunks():
+            destination.write(chunk)
 
     url_path = f"/uploads/{year_str}/{month_str}/{unique_filename}"
 
-    return {
+    return Response({
         "success": True,
         "data": {
-            "filename": file.filename,
+            "filename": uploaded_file.name,
             "url": url_path,
-            "size_bytes": len(content),
-            "mime_type": file.content_type
+            "size_bytes": uploaded_file.size,
+            "mime_type": uploaded_file.content_type
         }
-    }
+    })

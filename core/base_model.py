@@ -1,23 +1,29 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Boolean
-from core.database import Base
+from django.db import models
+from django.utils import timezone
 
-def generate_uuid() -> str:
+
+def generate_uuid():
     return str(uuid.uuid4())
 
-class BaseModel(Base):
-    __abstract__ = True
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    status = Column(String(20), nullable=False, default="ACTIVE")
-    is_active = Column(Boolean, nullable=False, default=True)
+class BaseModel(models.Model):
+    id = models.CharField(max_length=36, primary_key=True, default=generate_uuid, editable=False)
+    status = models.CharField(max_length=20, default='ACTIVE')
+    is_active = models.BooleanField(default=True)
 
-    organization_id = Column(String(36), nullable=True)
-    branch_id = Column(String(36), nullable=True)
+    organization_id = models.CharField(max_length=36, null=True, blank=True)
+    branch_id = models.CharField(max_length=36, null=True, blank=True)
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
 
-    created_by_id = Column(String(36), nullable=True)
-    updated_by_id = Column(String(36), nullable=True)
+    created_by_id = models.CharField(max_length=36, null=True, blank=True)
+    updated_by_id = models.CharField(max_length=36, null=True, blank=True)
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        self.updated_at = timezone.now()
+        super().save(*args, **kwargs)

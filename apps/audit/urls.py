@@ -1,10 +1,8 @@
-from core.routing import path, create_router
+from django.urls import re_path
 from apps.audit import views
 
 urlpatterns = [
-    path("", views.list_audit_logs_view, methods=["GET"], summary="List audit logs history"),
-    path("/logs", views.list_audit_logs_view, methods=["GET"], summary="List audit logs history"),
-    path("/list", views.list_audit_logs_view, methods=["GET"], summary="List audit logs history"),
+    re_path(r'^/?$', views.list_audit_logs_view),
+    re_path(r'^/logs/?$', views.list_audit_logs_view),
+    re_path(r'^/list/?$', views.list_audit_logs_view),
 ]
-
-router = create_router(urlpatterns)

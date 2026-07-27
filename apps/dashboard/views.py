@@ -1,28 +1,26 @@
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.database import get_db
-from core.dependencies import get_current_user
-from apps.accounts.models import User
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated
 from apps.dashboard.services import DashboardService
-from apps.dashboard.schemas import DashboardSummaryResponse, DashboardChartsResponse, DashboardSummaryData, DashboardChartsData
+from apps.dashboard.serializers import DashboardSummaryDataSerializer, ChartDataPointSerializer
 
-async def get_summary_view(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    summary_data = await DashboardService.get_summary(db)
-    return DashboardSummaryResponse(
-        success=True,
-        data=DashboardSummaryData(**summary_data)
-    )
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_summary_view(request):
+    summary_data = DashboardService.get_summary()
+    return Response({
+        "success": True,
+        "data": DashboardSummaryDataSerializer(summary_data).data
+    })
 
-async def get_charts_view(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    charts_data = await DashboardService.get_charts(db)
-    return DashboardChartsResponse(
-        success=True,
-        data=DashboardChartsData(trends=charts_data)
-    )
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_charts_view(request):
+    charts_data = DashboardService.get_charts()
+    return Response({
+        "success": True,
+        "data": {"trends": ChartDataPointSerializer(charts_data, many=True).data}
+    })

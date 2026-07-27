@@ -1,8 +1,6 @@
-from core.routing import path, create_router
+from django.urls import re_path
 from apps.files import views
 
 urlpatterns = [
-    path("/upload", views.upload_file_view, methods=["POST"], summary="Upload file asset"),
+    re_path(r'^/upload/?$', views.upload_file_view),
 ]
-
-router = create_router(urlpatterns)

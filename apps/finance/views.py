@@ -1,54 +1,53 @@
-from typing import List
-from fastapi import Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-
-from core.database import get_db
-from core.dependencies import get_current_user, RequireRole
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated, require_roles
 from core.audit_helper import record_audit_log
-from apps.accounts.models import User
 from apps.finance.models import FinancialTransaction
-from apps.finance.schemas import TransactionCreate, TransactionResponse
+from apps.finance.serializers import TransactionCreateSerializer, TransactionResponseSerializer
 
-async def list_financial_transactions_view(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    query = select(FinancialTransaction).order_by(FinancialTransaction.created_at.desc()).offset((page - 1) * limit).limit(limit)
-    res = await db.execute(query)
-    items = list(res.scalars().all())
-    resp = [TransactionResponse.model_validate(i) for i in items]
-    return {"success": True, "data": resp}
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def financial_transactions_view(request):
+    if request.method == 'GET':
+        page = int(request.query_params.get('page', 1))
+        limit = int(request.query_params.get('limit', 20))
 
-async def create_financial_transaction_view(
-    request: Request,
-    body: TransactionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "ACCOUNTANT"]))
-):
-    tx = FinancialTransaction(
-        transaction_number=body.transaction_number,
-        type=body.type,
-        expense_type_id=body.expense_type_id,
-        amount=body.amount,
-        currency=body.currency,
-        reference_id=body.reference_id,
-        transaction_date=body.transaction_date,
-        notes=body.notes,
-        created_by_id=current_user.id
+        qs = FinancialTransaction.objects.all().order_by('-created_at')
+        total = qs.count()
+        skip = (page - 1) * limit
+        items = list(qs[skip:skip + limit])
+
+        resp = TransactionResponseSerializer(items, many=True).data
+        return Response({"success": True, "data": resp})
+
+    # POST (create)
+    if request.user.role not in ['ADMIN', 'ACCOUNTANT']:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = TransactionCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+
+    tx = FinancialTransaction.objects.create(
+        transaction_number=body_data["transaction_number"],
+        type=body_data["type"],
+        expense_type_id=body_data.get("expense_type_id"),
+        amount=body_data["amount"],
+        currency=body_data["currency"],
+        reference_id=body_data.get("reference_id"),
+        transaction_date=body_data["transaction_date"],
+        notes=body_data.get("notes"),
+        created_by_id=request.user.id
     )
-    db.add(tx)
-    await db.flush()
 
-    await record_audit_log(
-        db=db,
+    record_audit_log(
         action="CREATE",
         entity_name="FINANCIAL_TRANSACTION",
         entity_id=tx.id,
-        actor_id=current_user.id,
-        new_values=body.model_dump(),
+        actor_id=request.user.id,
+        new_values=body_data,
         request=request
     )
-    return {"success": True, "data": TransactionResponse.model_validate(tx)}
+    return Response({"success": True, "data": TransactionResponseSerializer(tx).data}, status=201)

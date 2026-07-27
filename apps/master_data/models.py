@@ -1,86 +1,112 @@
-from sqlalchemy import Column, String, Text, Numeric
+from django.db import models
 from core.base_model import BaseModel
 
 class ProductCategory(BaseModel):
-    __tablename__ = "product_categories"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'product_categories'
 
 class MaterialType(BaseModel):
-    __tablename__ = "material_types"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    description = Column(Text, nullable=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'material_types'
 
 class Unit(BaseModel):
-    __tablename__ = "units"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    symbol = Column(String(20), nullable=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    symbol = models.CharField(max_length=20, null=True, blank=True)
+
+    class Meta:
+        db_table = 'units'
 
 class Supplier(BaseModel):
-    __tablename__ = "suppliers"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    contact_name = Column(String(255), nullable=True)
-    phone = Column(String(50), nullable=True)
-    email = Column(String(255), nullable=True)
-    address = Column(Text, nullable=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    contact_name = models.CharField(max_length=255, null=True, blank=True)
+    phone = models.CharField(max_length=50, null=True, blank=True)
+    email = models.CharField(max_length=255, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'suppliers'
 
 class Customer(BaseModel):
-    __tablename__ = "customers"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    contact_name = Column(String(255), nullable=True)
-    phone = Column(String(50), nullable=True)
-    email = Column(String(255), nullable=True)
-    address = Column(Text, nullable=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    contact_name = models.CharField(max_length=255, null=True, blank=True)
+    phone = models.CharField(max_length=50, null=True, blank=True)
+    email = models.CharField(max_length=255, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'customers'
 
 class Warehouse(BaseModel):
-    __tablename__ = "warehouses"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    location = Column(String(255), nullable=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    location = models.CharField(max_length=255, null=True, blank=True)
+
+    class Meta:
+        db_table = 'warehouses'
 
 class WarrantyType(BaseModel):
-    __tablename__ = "warranty_types"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
-    months = Column(Numeric(5, 0), default=12)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    months = models.DecimalField(max_digits=5, decimal_places=0, default=12)
+
+    class Meta:
+        db_table = 'warranty_types'
 
 class CustomerType(BaseModel):
-    __tablename__ = "customer_types"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'customer_types'
 
 class ServiceType(BaseModel):
-    __tablename__ = "service_types"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'service_types'
 
 class Priority(BaseModel):
-    __tablename__ = "priorities"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'priorities'
 
 class OrderStatus(BaseModel):
-    __tablename__ = "order_statuses"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'order_statuses'
 
 class ExpenseType(BaseModel):
-    __tablename__ = "expense_types"
-    code = Column(String(50), unique=True, nullable=False)
-    name = Column(String(255), nullable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        db_table = 'expense_types'
 
 class Company(BaseModel):
-    __tablename__ = "company_profile"
-    name = Column(String(255), nullable=False)
-    phone = Column(String(50), nullable=True)
-    website = Column(String(255), nullable=True)
-    address = Column(Text, nullable=True)
-    description = Column(Text, nullable=True)
-    currency = Column(String(20), default="USD")
-    timezone = Column(String(100), default="Asia/Tashkent (UTC+5)")
-    date_format = Column(String(50), default="YYYY-MM-DD")
+    name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, null=True, blank=True)
+    website = models.CharField(max_length=255, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    currency = models.CharField(max_length=20, default="USD")
+    timezone = models.CharField(max_length=100, default="Asia/Tashkent (UTC+5)")
+    date_format = models.CharField(max_length=50, default="YYYY-MM-DD")
+
+    class Meta:
+        db_table = 'company_profile'

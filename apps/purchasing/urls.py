@@ -1,12 +1,9 @@
-from core.routing import path, create_router
+from django.urls import re_path
 from apps.purchasing import views
 
 urlpatterns = [
-    path("", views.list_purchases_view, methods=["GET"], summary="List purchase documents"),
-    path("/list", views.list_purchases_view, methods=["GET"], summary="List purchase documents"),
-    path("", views.create_purchase_view, methods=["POST"], status_code=201, summary="Create purchase document"),
-    path("/create", views.create_purchase_view, methods=["POST"], status_code=201, summary="Create purchase document"),
-    path("/{id}/status", views.update_purchase_status_view, methods=["PUT"], summary="Update purchase status"),
+    re_path(r'^/?$', views.purchases_list_create_view),
+    re_path(r'^/list/?$', views.purchases_list_create_view),
+    re_path(r'^/create/?$', views.purchases_list_create_view),
+    re_path(r'^/(?P<id>[^/]+)/status/?$', views.update_purchase_status_view),
 ]
-
-router = create_router(urlpatterns)

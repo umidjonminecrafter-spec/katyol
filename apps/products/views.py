@@ -1,141 +1,101 @@
-from typing import Optional
-from fastapi import Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from core.database import get_db
-from core.dependencies import get_current_user, RequireRole
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.response import Response
+from core.authentication import JWTAuthentication
+from core.permissions import IsAuthenticated, require_roles
 from core.audit_helper import record_audit_log
-from apps.accounts.models import User
 from apps.products.services import ProductService
-from apps.products.schemas import ProductCreate, ProductUpdate, ProductResponse
+from apps.products.serializers import ProductCreateSerializer, ProductUpdateSerializer, ProductResponseSerializer
 
-async def list_products_view(
-    page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
-    search: Optional[str] = None,
-    category_id: Optional[str] = None,
-    type: Optional[str] = None,
-    status_filter: str = Query("ACTIVE", alias="status"),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    items, total = await ProductService.get_multi(
-        db, page=page, limit=limit, search=search, category_id=category_id, product_type=type, status=status_filter
-    )
-    total_pages = (total + limit - 1) // limit if limit > 0 else 1
-    
-    response_items = []
-    for item in items:
-        resp = ProductResponse.model_validate(item)
-        if item.category:
-            resp.category_name = item.category.name
-        if item.unit:
-            resp.unit_name = item.unit.name
-        if item.material_type:
-            resp.material_type_name = item.material_type.name
-        if item.supplier:
-            resp.supplier_name = item.supplier.name
-        response_items.append(resp)
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def products_list_create_view(request):
+    if request.method == 'GET':
+        page = int(request.query_params.get('page', 1))
+        limit = int(request.query_params.get('limit', 20))
+        search = request.query_params.get('search')
+        category_id = request.query_params.get('category_id')
+        product_type = request.query_params.get('type')
+        status_filter = request.query_params.get('status', 'ACTIVE')
 
-    return {
-        "success": True,
-        "data": response_items,
-        "pagination": {
-            "total": total,
-            "page": page,
-            "limit": limit,
-            "total_pages": total_pages
-        }
-    }
+        items, total = ProductService.get_multi(
+            page=page, limit=limit, search=search, category_id=category_id, product_type=product_type, status=status_filter
+        )
+        total_pages = (total + limit - 1) // limit if limit > 0 else 1
+        
+        response_items = ProductResponseSerializer(items, many=True).data
 
-async def create_product_view(
-    request: Request,
-    body: ProductCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER"]))
-):
-    product = await ProductService.create(db, body.model_dump(), created_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
+        return Response({
+            "success": True,
+            "data": response_items,
+            "pagination": {
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "total_pages": total_pages
+            }
+        })
+
+    # POST (create)
+    if request.user.role not in ['ADMIN', 'MANAGER']:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    serializer = ProductCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+
+    product = ProductService.create(body_data, created_by_id=request.user.id)
+    record_audit_log(
         action="CREATE",
         entity_name="PRODUCT",
         entity_id=product.id,
-        actor_id=current_user.id,
-        new_values=body.model_dump(),
+        actor_id=request.user.id,
+        new_values=body_data,
         request=request
     )
-    resp = ProductResponse.model_validate(product)
-    if product.category:
-        resp.category_name = product.category.name
-    if product.unit:
-        resp.unit_name = product.unit.name
-    if product.material_type:
-        resp.material_type_name = product.material_type.name
-    if product.supplier:
-        resp.supplier_name = product.supplier.name
-    return {"success": True, "data": resp}
+    return Response({"success": True, "data": ProductResponseSerializer(product).data}, status=201)
 
-async def get_product_view(
-    id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    product = await ProductService.get_by_id(db, id)
-    resp = ProductResponse.model_validate(product)
-    if product.category:
-        resp.category_name = product.category.name
-    if product.unit:
-        resp.unit_name = product.unit.name
-    if product.material_type:
-        resp.material_type_name = product.material_type.name
-    if product.supplier:
-        resp.supplier_name = product.supplier.name
-    return {"success": True, "data": resp}
+@api_view(['GET', 'PUT', 'DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def product_detail_view(request, id):
+    if request.method == 'GET':
+        product = ProductService.get_by_id(id)
+        return Response({"success": True, "data": ProductResponseSerializer(product).data})
 
-async def update_product_view(
-    id: str,
-    request: Request,
-    body: ProductUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN", "MANAGER"]))
-):
-    old_product = await ProductService.get_by_id(db, id)
-    old_values = {"name": old_product.name, "unit_price": float(old_product.unit_price)}
-    updated = await ProductService.update(db, id, body.model_dump(exclude_unset=True), updated_by_id=current_user.id)
-    await record_audit_log(
-        db=db,
-        action="UPDATE",
-        entity_name="PRODUCT",
-        entity_id=id,
-        actor_id=current_user.id,
-        old_values=old_values,
-        new_values=body.model_dump(exclude_unset=True),
-        request=request
-    )
-    resp = ProductResponse.model_validate(updated)
-    if updated.category:
-        resp.category_name = updated.category.name
-    if updated.unit:
-        resp.unit_name = updated.unit.name
-    if updated.material_type:
-        resp.material_type_name = updated.material_type.name
-    if updated.supplier:
-        resp.supplier_name = updated.supplier.name
-    return {"success": True, "data": resp}
+    if request.method == 'PUT':
+        if request.user.role not in ['ADMIN', 'MANAGER']:
+            return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
 
-async def delete_product_view(
-    id: str,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequireRole(["ADMIN"]))
-):
-    await ProductService.delete(db, id)
-    await record_audit_log(
-        db=db,
+        old_product = ProductService.get_by_id(id)
+        old_values = {"name": old_product.name, "unit_price": float(old_product.unit_price)}
+
+        serializer = ProductUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        update_data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+
+        updated = ProductService.update(id, update_data, updated_by_id=request.user.id)
+        record_audit_log(
+            action="UPDATE",
+            entity_name="PRODUCT",
+            entity_id=id,
+            actor_id=request.user.id,
+            old_values=old_values,
+            new_values=update_data,
+            request=request
+        )
+        return Response({"success": True, "data": ProductResponseSerializer(updated).data})
+
+    # DELETE
+    if request.user.role not in ['ADMIN']:
+        return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
+
+    ProductService.delete(id)
+    record_audit_log(
         action="DELETE",
         entity_name="PRODUCT",
         entity_id=id,
-        actor_id=current_user.id,
+        actor_id=request.user.id,
         request=request
     )
-    return {"success": True, "data": {"id": id, "deleted": True}}
+    return Response({"success": True, "data": {"id": id, "deleted": True}})
