@@ -27,6 +27,18 @@ class KatyolAPITestCase(TestCase):
         self.assertEqual(data["status"], "online")
         self.assertEqual(data["app"], "Kotyol ERP Backend")
 
+    def test_cors_preflight(self):
+        response = self.client.options(
+            "/api/v1/auth/branches",
+            HTTP_ORIGIN="http://localhost:3000",
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="GET",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="x-branch-id,authorization"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://localhost:3000")
+        self.assertIn("x-branch-id", response["Access-Control-Allow-Headers"].lower())
+
+
     def test_login_success_and_invalid(self):
         # Invalid login
         res_bad = self.client.post("/api/v1/auth/login", {"username": "admin@kotyol.uz", "password": "WrongPassword"}, format='json')
