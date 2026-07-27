@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers
 
 load_dotenv()
 
@@ -67,6 +68,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-branch-id',
+    'X-Branch-ID',
+    'authorization',
+]
 APPEND_SLASH = False
 
 
@@ -93,6 +99,7 @@ MEDIA_URL = '/uploads/'
 MEDIA_ROOT = UPLOAD_DIR
 
 STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Logging
 if DEBUG:
