@@ -42,12 +42,17 @@ class MasterDataService:
     @classmethod
     def create(cls, entity_key: str, data: dict, created_by_id: str):
         model = cls.get_model(entity_key)
-        if "code" in data:
+        if "code" in data and data["code"]:
             if model.objects.filter(code=data["code"]).exists():
                 raise CustomAppException(message=f"'{data['code']}' kodli master data allaqachon mavjud", error_code="DUPLICATE_CODE")
-        if created_by_id and hasattr(model, "created_by_id"):
-            data["created_by_id"] = created_by_id
-        item = model.objects.create(**data)
+        
+        model_fields = {f.name for f in model._meta.get_fields()}
+        valid_data = {k: v for k, v in data.items() if k in model_fields and v is not None}
+
+        if created_by_id and "created_by_id" in model_fields:
+            valid_data["created_by_id"] = created_by_id
+
+        item = model.objects.create(**valid_data)
         return item
 
     @classmethod
@@ -58,13 +63,15 @@ class MasterDataService:
         except model.DoesNotExist:
             raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
         
+        model_fields = {f.name for f in model._meta.get_fields()}
         for k, v in data.items():
-            if hasattr(item, k) and v is not None:
+            if k in model_fields and v is not None and hasattr(item, k):
                 setattr(item, k, v)
-        if updated_by_id and hasattr(item, "updated_by_id"):
+        if updated_by_id and "updated_by_id" in model_fields:
             item.updated_by_id = updated_by_id
         item.save()
         return item
+
 
     @classmethod
     def archive(cls, entity_key: str, item_id: str, updated_by_id: str):

@@ -101,10 +101,12 @@ class ExpenseType(BaseModel):
 class SalaryType(BaseModel):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     description = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'salary_types'
+
 
 class Company(BaseModel):
     name = models.CharField(max_length=255)

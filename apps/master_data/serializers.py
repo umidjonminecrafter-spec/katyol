@@ -11,6 +11,7 @@ class MasterDataCreateSerializer(serializers.Serializer):
     location = serializers.CharField(required=False, allow_null=True)
     months = serializers.FloatField(required=False, allow_null=True)
     symbol = serializers.CharField(required=False, allow_null=True)
+    amount = serializers.FloatField(required=False, allow_null=True)
 
 class MasterDataUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_null=True)
@@ -22,6 +23,7 @@ class MasterDataUpdateSerializer(serializers.Serializer):
     location = serializers.CharField(required=False, allow_null=True)
     months = serializers.FloatField(required=False, allow_null=True)
     symbol = serializers.CharField(required=False, allow_null=True)
+    amount = serializers.FloatField(required=False, allow_null=True)
     status = serializers.CharField(required=False, allow_null=True)
 
 class MasterDataResponseSerializer(serializers.Serializer):
@@ -36,9 +38,11 @@ class MasterDataResponseSerializer(serializers.Serializer):
     location = serializers.CharField(allow_null=True, required=False)
     months = serializers.FloatField(allow_null=True, required=False)
     symbol = serializers.CharField(allow_null=True, required=False)
+    amount = serializers.FloatField(allow_null=True, required=False)
     status = serializers.CharField()
     created_at = serializers.DateTimeField()
     updated_at = serializers.DateTimeField()
+
 
 class CompanyUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_null=True)
