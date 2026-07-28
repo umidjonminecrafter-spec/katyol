@@ -2,7 +2,7 @@ from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
 from apps.master_data.models import (
     ProductCategory, MaterialType, Unit, Supplier, Customer,
-    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType
+    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType
 )
 
 MASTER_DATA_MODELS = {
@@ -18,6 +18,7 @@ MASTER_DATA_MODELS = {
     "priorities": Priority,
     "order-statuses": OrderStatus,
     "expense-types": ExpenseType,
+    "salary-types": SalaryType,
 }
 
 class MasterDataService:

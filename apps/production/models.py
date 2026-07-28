@@ -13,3 +13,14 @@ class ProductionBatch(BaseModel):
 
     class Meta:
         db_table = 'production_batches'
+
+class ProductionOperation(BaseModel):
+    batch = models.ForeignKey(ProductionBatch, on_delete=models.CASCADE, related_name='operations')
+    operation_name = models.CharField(max_length=255)
+    worker_id = models.CharField(max_length=36, null=True, blank=True)
+    worker_name = models.CharField(max_length=255, null=True, blank=True)
+    rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    status = models.CharField(max_length=30, default="PENDING")
+
+    class Meta:
+        db_table = 'production_operations'
