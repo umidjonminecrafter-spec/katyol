@@ -72,6 +72,9 @@ class AuthService:
             role=data.get('role', 'EMPLOYEE'),
             position_id=data.get('position_id'),
             department=data.get('department'),
+            salary_amount=data.get('salary_amount', ''),
+            salary_type_id=data.get('salary_type_id', ''),
+            hire_date=data.get('hire_date', ''),
             organization_name=creator.organization_name,
             branch_name=creator.branch_name,
             organization=creator.organization,
@@ -79,6 +82,7 @@ class AuthService:
             status='ACTIVE',
         )
         return user
+
 
     @staticmethod
     def list_employees(creator):
