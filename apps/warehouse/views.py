@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated
 from core.audit_helper import record_audit_log
+from core.exceptions import CustomAppException
 from apps.warehouse.services import WarehouseService
 from apps.warehouse.serializers import StockResponseSerializer, StockAdjustmentRequestSerializer
 
@@ -40,6 +41,12 @@ def get_warehouse_stock_view(request):
     serializer.is_valid(raise_exception=True)
     d = serializer.validated_data
 
+    warehouse_id = d.get('warehouse_id') or ""
+    product_id = d.get('product_id') or ""
+
+    if not warehouse_id or not product_id:
+        raise CustomAppException(message="Ombor (warehouse_id) va Mahsulot (product_id) tanlanishi shart", status_code=400)
+
     delta = d.get('quantity_delta')
     if delta is None:
         delta = d.get('quantity', 0.0) or 0.0
@@ -48,8 +55,8 @@ def get_warehouse_stock_view(request):
     movement_type = d.get('movement_type') or "ADJUSTMENT"
 
     stock = WarehouseService.adjust_stock(
-        warehouse_id=d['warehouse_id'],
-        product_id=d['product_id'],
+        warehouse_id=warehouse_id,
+        product_id=product_id,
         quantity_delta=Decimal(str(delta)),
         unit_cost=unit_cost,
         movement_type=movement_type,

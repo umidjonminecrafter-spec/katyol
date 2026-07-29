@@ -26,10 +26,10 @@ class StockResponseSerializer(serializers.Serializer):
         return float(obj.quantity - obj.reserved_quantity)
 
 class StockAdjustmentRequestSerializer(serializers.Serializer):
-    warehouse_id = serializers.CharField()
-    product_id = serializers.CharField()
-    quantity = serializers.FloatField(required=False, allow_null=True)
-    quantity_delta = serializers.FloatField(required=False, allow_null=True)
+    warehouse_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    product_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    quantity = serializers.FloatField(required=False, allow_null=True, default=0.0)
+    quantity_delta = serializers.FloatField(required=False, allow_null=True, default=0.0)
     unit_cost = serializers.FloatField(required=False, allow_null=True, default=0.0)
     movement_type = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="ADJUSTMENT")
     notes = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
