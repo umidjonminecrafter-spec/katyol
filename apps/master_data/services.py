@@ -42,9 +42,16 @@ class MasterDataService:
     @classmethod
     def create(cls, entity_key: str, data: dict, created_by_id: str):
         model = cls.get_model(entity_key)
-        if "code" in data and data["code"]:
-            if model.objects.filter(code=data["code"]).exists():
-                raise CustomAppException(message=f"'{data['code']}' kodli master data allaqachon mavjud", error_code="DUPLICATE_CODE")
+        code_val = data.get("code")
+        if code_val and str(code_val).strip():
+            code_val = str(code_val).strip()
+            if model.objects.filter(code=code_val).exists():
+                raise CustomAppException(message=f"'{code_val}' kodli master data allaqachon mavjud", error_code="DUPLICATE_CODE")
+            data["code"] = code_val
+        else:
+            import uuid
+            name_prefix = data.get("name", "ITEM").strip().upper().replace(" ", "_")[:15]
+            data["code"] = f"{name_prefix}_{str(uuid.uuid4())[:6]}"
         
         model_fields = {f.name for f in model._meta.get_fields()}
         valid_data = {k: v for k, v in data.items() if k in model_fields and v is not None}
@@ -54,6 +61,7 @@ class MasterDataService:
 
         item = model.objects.create(**valid_data)
         return item
+
 
     @classmethod
     def update(cls, entity_key: str, item_id: str, data: dict, updated_by_id: str):
