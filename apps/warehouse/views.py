@@ -1,12 +1,14 @@
+import uuid
 from decimal import Decimal
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated
 from core.audit_helper import record_audit_log
-from core.exceptions import CustomAppException
 from apps.warehouse.services import WarehouseService
 from apps.warehouse.serializers import StockResponseSerializer, StockAdjustmentRequestSerializer
+from apps.master_data.models import Warehouse, ProductCategory, Unit
+from apps.products.models import Product
 
 @api_view(['GET', 'POST'])
 @authentication_classes([JWTAuthentication])
@@ -41,22 +43,68 @@ def get_warehouse_stock_view(request):
     serializer.is_valid(raise_exception=True)
     d = serializer.validated_data
 
-    warehouse_id = d.get('warehouse_id') or ""
-    product_id = d.get('product_id') or ""
+    warehouse_id = (d.get('warehouse_id') or "").strip()
+    product_id = (d.get('product_id') or "").strip()
 
-    if not warehouse_id or not product_id:
-        raise CustomAppException(message="Ombor (warehouse_id) va Mahsulot (product_id) tanlanishi shart", status_code=400)
+    # 1. Resolve or fallback Warehouse
+    wh = None
+    if warehouse_id:
+        wh = Warehouse.objects.filter(id=warehouse_id).first()
+    if not wh:
+        wh = Warehouse.objects.first()
+    if not wh:
+        wh = Warehouse.objects.create(code="WH-MAIN", name="Asosiy Ombor")
+    final_warehouse_id = wh.id
 
+    # 2. Resolve or auto-create Product if product_id is missing or not found
+    prod = None
+    if product_id:
+        prod = Product.objects.filter(id=product_id).first()
+
+    p_code = (d.get('product_code') or d.get('code') or "").strip()
+    p_name = (d.get('product_name') or d.get('name') or "").strip()
+
+    if not prod and p_code:
+        prod = Product.objects.filter(code=p_code).first()
+
+    if not prod and p_name:
+        prod = Product.objects.filter(name=p_name).first()
+
+    if not prod:
+        cat = ProductCategory.objects.first()
+        if not cat:
+            cat = ProductCategory.objects.create(code="CAT-MAIN", name="Asosiy Kategoriya")
+
+        unit = Unit.objects.first()
+        if not unit:
+            unit = Unit.objects.create(code="UNIT-PCS", name="dona", symbol="dona")
+
+        if not p_code:
+            p_code = f"PRD-{str(uuid.uuid4())[:6]}"
+        if not p_name:
+            p_name = f"Mahsulot {p_code}"
+
+        prod = Product.objects.create(
+            code=p_code,
+            name=p_name,
+            category=cat,
+            unit=unit,
+            type="RAW_MATERIAL",
+            unit_price=Decimal(str(d.get('unit_cost') or 0.0))
+        )
+    final_product_id = prod.id
+
+    # 3. Calculate quantity delta
     delta = d.get('quantity_delta')
-    if delta is None:
+    if delta is None or delta == 0.0:
         delta = d.get('quantity', 0.0) or 0.0
 
     unit_cost = Decimal(str(d.get('unit_cost') or 0.0))
     movement_type = d.get('movement_type') or "ADJUSTMENT"
 
     stock = WarehouseService.adjust_stock(
-        warehouse_id=warehouse_id,
-        product_id=product_id,
+        warehouse_id=final_warehouse_id,
+        product_id=final_product_id,
         quantity_delta=Decimal(str(delta)),
         unit_cost=unit_cost,
         movement_type=movement_type,

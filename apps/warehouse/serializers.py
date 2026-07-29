@@ -28,6 +28,10 @@ class StockResponseSerializer(serializers.Serializer):
 class StockAdjustmentRequestSerializer(serializers.Serializer):
     warehouse_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     product_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    product_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    product_code = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    code = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     quantity = serializers.FloatField(required=False, allow_null=True, default=0.0)
     quantity_delta = serializers.FloatField(required=False, allow_null=True, default=0.0)
     unit_cost = serializers.FloatField(required=False, allow_null=True, default=0.0)
