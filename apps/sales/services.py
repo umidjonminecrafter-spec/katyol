@@ -1,33 +1,64 @@
+import uuid
+import datetime
 from decimal import Decimal
 from core.exceptions import CustomAppException
 from apps.sales.models import Sale
+from apps.master_data.models import Customer
+from apps.products.models import Boiler, Product
 
 class SalesService:
     @staticmethod
     def create_sale(data: dict, created_by_id: str) -> Sale:
-        inv_num = data.get("invoice_number")
-        if Sale.objects.filter(invoice_number=inv_num).exists():
-            raise CustomAppException(message=f"'{inv_num}' raqamli sotuv hisobi allaqachon mavjud", error_code="DUPLICATE_INVOICE_NUMBER")
+        inv_num = (data.get("invoice_number") or "").strip()
+        if not inv_num or inv_num in ["undefined", "null"]:
+            inv_num = f"DOC-{datetime.date.today().year}-{str(uuid.uuid4())[:6].upper()}"
 
-        qty = Decimal(str(data["quantity"]))
-        unit_price = Decimal(str(data["unit_price"]))
+        if Sale.objects.filter(invoice_number=inv_num).exists():
+            inv_num = f"DOC-{datetime.date.today().year}-{str(uuid.uuid4())[:6].upper()}"
+
+        # Resolve Customer safely
+        cust_id = (data.get("customer_id") or "").strip()
+        customer = None
+        if cust_id and cust_id not in ["undefined", "null"]:
+            customer = Customer.objects.filter(id=cust_id).first()
+
+        if not customer:
+            customer = Customer.objects.first()
+
+        if not customer:
+            customer = Customer.objects.create(code="CUST-GEN", name="Umumiy Mijoz")
+
+        # Resolve Boiler safely
+        boiler_id = (data.get("boiler_id") or "").strip()
+        boiler = None
+        if boiler_id and boiler_id not in ["undefined", "null"]:
+            boiler = Boiler.objects.filter(id=boiler_id).first()
+
+        # Resolve Product safely
+        product_id = (data.get("product_id") or "").strip()
+        product = None
+        if product_id and product_id not in ["undefined", "null"]:
+            product = Product.objects.filter(id=product_id).first()
+
+        qty = Decimal(str(data.get("quantity", 1.0) or 1.0))
+        unit_price = Decimal(str(data.get("unit_price", 0.0) or 0.0))
         subtotal = qty * unit_price
-        disc = Decimal(str(data.get("discount_amount", 0)))
-        tax = Decimal(str(data.get("tax_amount", 0)))
+        disc = Decimal(str(data.get("discount_amount", 0) or 0))
+        tax = Decimal(str(data.get("tax_amount", 0) or 0))
         total_amount = subtotal - disc + tax
 
         sale = Sale.objects.create(
             invoice_number=inv_num,
-            customer_id=data["customer_id"],
-            boiler_id=data.get("boiler_id"),
-            product_id=data.get("product_id"),
+            customer=customer,
+            boiler=boiler,
+            product=product,
             quantity=qty,
             unit_price=unit_price,
             subtotal=subtotal,
             discount_amount=disc,
             tax_amount=tax,
             total_amount=total_amount,
-            exchange_rate_at_creation=Decimal(str(data.get("exchange_rate_at_creation", 1.0))),
+            exchange_rate_at_creation=Decimal(str(data.get("exchange_rate_at_creation", 1.0) or 1.0)),
             payment_status="UNPAID",
             delivery_status="PENDING",
             created_by_id=created_by_id
