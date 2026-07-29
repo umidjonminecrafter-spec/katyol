@@ -14,13 +14,13 @@ class StockResponseSerializer(serializers.Serializer):
     updated_at = serializers.DateTimeField()
 
     def get_warehouse_name(self, obj):
-        return obj.warehouse.name if getattr(obj, 'warehouse', None) else None
+        return obj.warehouse.name if getattr(obj, 'warehouse', None) else ""
 
     def get_product_code(self, obj):
-        return obj.product.code if getattr(obj, 'product', None) else None
+        return obj.product.code if getattr(obj, 'product', None) else ""
 
     def get_product_name(self, obj):
-        return obj.product.name if getattr(obj, 'product', None) else None
+        return obj.product.name if getattr(obj, 'product', None) else ""
 
     def get_available_quantity(self, obj):
         return float(obj.quantity - obj.reserved_quantity)
@@ -28,5 +28,8 @@ class StockResponseSerializer(serializers.Serializer):
 class StockAdjustmentRequestSerializer(serializers.Serializer):
     warehouse_id = serializers.CharField()
     product_id = serializers.CharField()
-    quantity_delta = serializers.FloatField()
-    notes = serializers.CharField(required=False, allow_null=True)
+    quantity = serializers.FloatField(required=False, allow_null=True)
+    quantity_delta = serializers.FloatField(required=False, allow_null=True)
+    unit_cost = serializers.FloatField(required=False, allow_null=True, default=0.0)
+    movement_type = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="ADJUSTMENT")
+    notes = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")

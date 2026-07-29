@@ -61,3 +61,37 @@ class WarehouseService:
             notes=notes
         )
         return stock
+
+    @staticmethod
+    def adjust_stock(
+        warehouse_id: str,
+        product_id: str,
+        quantity_delta: Decimal,
+        unit_cost: Decimal = Decimal("0.00"),
+        movement_type: str = "ADJUSTMENT",
+        notes: str = None
+    ) -> WarehouseStock:
+        stock = WarehouseStock.objects.filter(warehouse_id=warehouse_id, product_id=product_id).first()
+
+        if not stock:
+            stock = WarehouseStock.objects.create(
+                warehouse_id=warehouse_id,
+                product_id=product_id,
+                quantity=max(Decimal("0.000"), quantity_delta),
+                reserved_quantity=Decimal("0.000"),
+                avg_unit_cost=unit_cost
+            )
+        else:
+            stock.quantity = max(Decimal("0.000"), stock.quantity + quantity_delta)
+            if unit_cost > 0:
+                stock.avg_unit_cost = unit_cost
+            stock.save()
+
+        StockMovement.objects.create(
+            movement_type=movement_type,
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+            quantity=quantity_delta,
+            notes=notes
+        )
+        return stock
