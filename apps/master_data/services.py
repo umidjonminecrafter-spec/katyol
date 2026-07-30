@@ -58,15 +58,24 @@ class MasterDataService:
     @classmethod
     def create(cls, entity_key: str, data: dict, created_by_id: str):
         model = cls.get_model(entity_key)
+
+        # 1. Resolve name
+        name_val = (data.get("name") or data.get("company_name") or data.get("title") or data.get("supplier_name") or "").strip()
+        if not name_val:
+            name_val = "Yangi Yozuv"
+        data["name"] = name_val
+
+        # 2. Resolve code
         code_val = data.get("code")
-        if code_val and str(code_val).strip():
+        if code_val and str(code_val).strip() and str(code_val).strip() not in ["undefined", "null"]:
             code_val = str(code_val).strip()
             if model.objects.filter(code=code_val).exists():
-                raise CustomAppException(message=f"'{code_val}' kodli master data allaqachon mavjud", error_code="DUPLICATE_CODE")
+                import uuid
+                code_val = f"{code_val}_{str(uuid.uuid4())[:4]}"
             data["code"] = code_val
         else:
             import uuid
-            name_prefix = data.get("name", "ITEM").strip().upper().replace(" ", "_")[:15]
+            name_prefix = name_val.upper().replace(" ", "_")[:15]
             data["code"] = f"{name_prefix}_{str(uuid.uuid4())[:6]}"
         
         model_fields = {f.name for f in model._meta.get_fields()}
@@ -87,6 +96,10 @@ class MasterDataService:
         except model.DoesNotExist:
             raise CustomAppException(message="Master data ob'ekti topilmadi", status_code=404)
         
+        name_val = (data.get("name") or data.get("company_name") or data.get("title") or data.get("supplier_name") or "").strip()
+        if name_val:
+            data["name"] = name_val
+
         model_fields = {f.name for f in model._meta.get_fields()}
         for k, v in data.items():
             if k in model_fields and v is not None and hasattr(item, k):

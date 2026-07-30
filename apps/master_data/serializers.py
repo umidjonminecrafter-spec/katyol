@@ -1,20 +1,29 @@
 from rest_framework import serializers
 
 class MasterDataCreateSerializer(serializers.Serializer):
-    code = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    name = serializers.CharField()
+    code = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    title = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    company_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    supplier_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     description = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     contact_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     phone = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     email = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     address = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     location = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    category_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    category_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
+    category = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     months = serializers.FloatField(required=False, allow_null=True)
     symbol = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="")
     amount = serializers.FloatField(required=False, allow_null=True, default=0.0)
+    status = serializers.CharField(required=False, allow_null=True, allow_blank=True, default="ACTIVE")
 
 class MasterDataUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    title = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    company_name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     description = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     contact_name = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     phone = serializers.CharField(required=False, allow_null=True, allow_blank=True)
