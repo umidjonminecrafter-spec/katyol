@@ -7,6 +7,9 @@ class StockResponseSerializer(serializers.Serializer):
     product_id = serializers.CharField()
     product_code = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
+    category_id = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
     quantity = serializers.FloatField()
     reserved_quantity = serializers.FloatField()
     available_quantity = serializers.SerializerMethodField()
@@ -21,6 +24,20 @@ class StockResponseSerializer(serializers.Serializer):
 
     def get_product_name(self, obj):
         return obj.product.name if getattr(obj, 'product', None) else ""
+
+    def get_category_id(self, obj):
+        prod = getattr(obj, 'product', None)
+        return prod.category.id if (prod and getattr(prod, 'category', None)) else ""
+
+    def get_category_name(self, obj):
+        prod = getattr(obj, 'product', None)
+        return prod.category.name if (prod and getattr(prod, 'category', None)) else ""
+
+    def get_category(self, obj):
+        prod = getattr(obj, 'product', None)
+        if prod and getattr(prod, 'category', None):
+            return {"id": prod.category.id, "name": prod.category.name, "code": prod.category.code}
+        return None
 
     def get_available_quantity(self, obj):
         return float(obj.quantity - obj.reserved_quantity)
