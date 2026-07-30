@@ -1,6 +1,8 @@
 from decimal import Decimal
 from core.exceptions import CustomAppException
 from apps.warehouse.models import WarehouseStock, StockMovement
+from apps.master_data.models import Warehouse
+from apps.products.models import Product
 
 class WarehouseService:
     @staticmethod
@@ -106,7 +108,7 @@ class WarehouseService:
 
         if "quantity" in data and data["quantity"] is not None:
             stock.quantity = Decimal(str(data["quantity"]))
-        elif "quantity_delta" in data and data["quantity_delta"] is not None:
+        elif "quantity_delta" in data and data["quantity_delta"] is not None and data["quantity_delta"] != 0:
             stock.quantity = max(Decimal("0.000"), stock.quantity + Decimal(str(data["quantity_delta"])))
 
         if "reserved_quantity" in data and data["reserved_quantity"] is not None:
@@ -117,11 +119,17 @@ class WarehouseService:
         elif "unit_cost" in data and data["unit_cost"] is not None:
             stock.avg_unit_cost = Decimal(str(data["unit_cost"]))
 
-        if "warehouse_id" in data and data["warehouse_id"]:
-            stock.warehouse_id = data["warehouse_id"]
+        # Safely validate warehouse_id
+        w_id = (str(data.get("warehouse_id") or "")).strip()
+        if w_id and w_id not in ["undefined", "null"]:
+            if Warehouse.objects.filter(id=w_id).exists():
+                stock.warehouse_id = w_id
 
-        if "product_id" in data and data["product_id"]:
-            stock.product_id = data["product_id"]
+        # Safely validate product_id
+        p_id = (str(data.get("product_id") or "")).strip()
+        if p_id and p_id not in ["undefined", "null"]:
+            if Product.objects.filter(id=p_id).exists():
+                stock.product_id = p_id
 
         if updated_by_id and hasattr(stock, "updated_by_id"):
             stock.updated_by_id = updated_by_id
