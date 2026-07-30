@@ -1,4 +1,5 @@
 from decimal import Decimal
+from core.exceptions import CustomAppException
 from apps.warehouse.models import WarehouseStock, StockMovement
 
 class WarehouseService:
@@ -93,5 +94,45 @@ class WarehouseService:
             product_id=product_id,
             quantity=quantity_delta,
             notes=notes
+        )
+        return stock
+
+    @staticmethod
+    def update_stock(stock_id: str, data: dict, updated_by_id: str = None) -> WarehouseStock:
+        try:
+            stock = WarehouseStock.objects.get(id=stock_id)
+        except WarehouseStock.DoesNotExist:
+            raise CustomAppException(message="Ombor qoldig'i topilmadi", status_code=404)
+
+        if "quantity" in data and data["quantity"] is not None:
+            stock.quantity = Decimal(str(data["quantity"]))
+        elif "quantity_delta" in data and data["quantity_delta"] is not None:
+            stock.quantity = max(Decimal("0.000"), stock.quantity + Decimal(str(data["quantity_delta"])))
+
+        if "reserved_quantity" in data and data["reserved_quantity"] is not None:
+            stock.reserved_quantity = Decimal(str(data["reserved_quantity"]))
+
+        if "avg_unit_cost" in data and data["avg_unit_cost"] is not None:
+            stock.avg_unit_cost = Decimal(str(data["avg_unit_cost"]))
+        elif "unit_cost" in data and data["unit_cost"] is not None:
+            stock.avg_unit_cost = Decimal(str(data["unit_cost"]))
+
+        if "warehouse_id" in data and data["warehouse_id"]:
+            stock.warehouse_id = data["warehouse_id"]
+
+        if "product_id" in data and data["product_id"]:
+            stock.product_id = data["product_id"]
+
+        if updated_by_id and hasattr(stock, "updated_by_id"):
+            stock.updated_by_id = updated_by_id
+
+        stock.save()
+
+        StockMovement.objects.create(
+            movement_type=data.get("movement_type") or "UPDATE",
+            warehouse_id=stock.warehouse_id,
+            product_id=stock.product_id,
+            quantity=stock.quantity,
+            notes=data.get("notes") or "Ombor qoldig'i tahrirlandi"
         )
         return stock

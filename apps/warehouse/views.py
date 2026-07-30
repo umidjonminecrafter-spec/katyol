@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated
 from core.audit_helper import record_audit_log
+from core.exceptions import CustomAppException
+from apps.warehouse.models import WarehouseStock
 from apps.warehouse.services import WarehouseService
 from apps.warehouse.serializers import StockResponseSerializer, StockAdjustmentRequestSerializer
 from apps.master_data.models import Warehouse, ProductCategory, Unit
@@ -121,3 +123,44 @@ def get_warehouse_stock_view(request):
     )
 
     return Response({"success": True, "data": StockResponseSerializer(stock).data}, status=201)
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def warehouse_stock_detail_view(request, id):
+    try:
+        stock = WarehouseStock.objects.get(id=id)
+    except WarehouseStock.DoesNotExist:
+        raise CustomAppException(message="Ombor qoldig'i topilmadi", status_code=404)
+
+    if request.method == 'GET':
+        return Response({"success": True, "data": StockResponseSerializer(stock).data})
+
+    if request.method in ['PUT', 'PATCH']:
+        serializer = StockAdjustmentRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        updated_stock = WarehouseService.update_stock(id, d, updated_by_id=request.user.id)
+
+        record_audit_log(
+            action="UPDATE_STOCK",
+            entity_name="WAREHOUSE_STOCK",
+            entity_id=id,
+            actor_id=request.user.id,
+            new_values=d,
+            request=request
+        )
+
+        return Response({"success": True, "data": StockResponseSerializer(updated_stock).data})
+
+    # DELETE
+    stock.delete()
+    record_audit_log(
+        action="DELETE_STOCK",
+        entity_name="WAREHOUSE_STOCK",
+        entity_id=id,
+        actor_id=request.user.id,
+        request=request
+    )
+    return Response({"success": True, "data": {"id": id, "deleted": True}})
