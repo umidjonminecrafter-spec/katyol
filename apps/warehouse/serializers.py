@@ -10,6 +10,12 @@ class StockResponseSerializer(serializers.Serializer):
     category_id = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
     category = serializers.SerializerMethodField()
+    material_type_id = serializers.SerializerMethodField()
+    material_type_name = serializers.SerializerMethodField()
+    material_type = serializers.SerializerMethodField()
+    unit_id = serializers.SerializerMethodField()
+    unit_name = serializers.SerializerMethodField()
+    unit = serializers.SerializerMethodField()
     quantity = serializers.FloatField()
     reserved_quantity = serializers.FloatField()
     available_quantity = serializers.SerializerMethodField()
@@ -37,6 +43,34 @@ class StockResponseSerializer(serializers.Serializer):
         prod = getattr(obj, 'product', None)
         if prod and getattr(prod, 'category', None):
             return {"id": prod.category.id, "name": prod.category.name, "code": prod.category.code}
+        return None
+
+    def get_material_type_id(self, obj):
+        prod = getattr(obj, 'product', None)
+        return prod.material_type.id if (prod and getattr(prod, 'material_type', None)) else ""
+
+    def get_material_type_name(self, obj):
+        prod = getattr(obj, 'product', None)
+        return prod.material_type.name if (prod and getattr(prod, 'material_type', None)) else ""
+
+    def get_material_type(self, obj):
+        prod = getattr(obj, 'product', None)
+        if prod and getattr(prod, 'material_type', None):
+            return {"id": prod.material_type.id, "name": prod.material_type.name, "code": prod.material_type.code}
+        return None
+
+    def get_unit_id(self, obj):
+        prod = getattr(obj, 'product', None)
+        return prod.unit.id if (prod and getattr(prod, 'unit', None)) else ""
+
+    def get_unit_name(self, obj):
+        prod = getattr(obj, 'product', None)
+        return prod.unit.name if (prod and getattr(prod, 'unit', None)) else ""
+
+    def get_unit(self, obj):
+        prod = getattr(obj, 'product', None)
+        if prod and getattr(prod, 'unit', None):
+            return {"id": prod.unit.id, "name": prod.unit.name, "code": prod.unit.code, "symbol": getattr(prod.unit, 'symbol', '')}
         return None
 
     def get_available_quantity(self, obj):
