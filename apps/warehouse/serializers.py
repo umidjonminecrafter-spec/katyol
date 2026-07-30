@@ -37,13 +37,13 @@ class StockResponseSerializer(serializers.Serializer):
 
     def get_category_name(self, obj):
         prod = getattr(obj, 'product', None)
-        return prod.category.name if (prod and getattr(prod, 'category', None)) else ""
+        return prod.category.name if (prod and getattr(prod, 'category', None)) else "Umumiy Kategoriya"
 
     def get_category(self, obj):
         prod = getattr(obj, 'product', None)
         if prod and getattr(prod, 'category', None):
             return {"id": prod.category.id, "name": prod.category.name, "code": prod.category.code}
-        return None
+        return {"id": "", "name": "Umumiy Kategoriya", "code": "GENERAL"}
 
     def get_material_type_id(self, obj):
         prod = getattr(obj, 'product', None)
@@ -51,13 +51,13 @@ class StockResponseSerializer(serializers.Serializer):
 
     def get_material_type_name(self, obj):
         prod = getattr(obj, 'product', None)
-        return prod.material_type.name if (prod and getattr(prod, 'material_type', None)) else ""
+        return prod.material_type.name if (prod and getattr(prod, 'material_type', None)) else "Standart"
 
     def get_material_type(self, obj):
         prod = getattr(obj, 'product', None)
         if prod and getattr(prod, 'material_type', None):
             return {"id": prod.material_type.id, "name": prod.material_type.name, "code": prod.material_type.code}
-        return None
+        return {"id": "", "name": "Standart", "code": "STANDARD"}
 
     def get_unit_id(self, obj):
         prod = getattr(obj, 'product', None)
@@ -65,13 +65,13 @@ class StockResponseSerializer(serializers.Serializer):
 
     def get_unit_name(self, obj):
         prod = getattr(obj, 'product', None)
-        return prod.unit.name if (prod and getattr(prod, 'unit', None)) else ""
+        return prod.unit.name if (prod and getattr(prod, 'unit', None)) else "dona"
 
     def get_unit(self, obj):
         prod = getattr(obj, 'product', None)
         if prod and getattr(prod, 'unit', None):
             return {"id": prod.unit.id, "name": prod.unit.name, "code": prod.unit.code, "symbol": getattr(prod.unit, 'symbol', '')}
-        return None
+        return {"id": "", "name": "dona", "code": "UNIT-PCS", "symbol": "dona"}
 
     def get_available_quantity(self, obj):
         return float(obj.quantity - obj.reserved_quantity)

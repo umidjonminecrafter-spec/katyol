@@ -9,7 +9,7 @@ from core.exceptions import CustomAppException
 from apps.warehouse.models import WarehouseStock
 from apps.warehouse.services import WarehouseService
 from apps.warehouse.serializers import StockResponseSerializer, StockAdjustmentRequestSerializer
-from apps.master_data.models import Warehouse, ProductCategory, Unit
+from apps.master_data.models import Warehouse, ProductCategory, MaterialType, Unit
 from apps.products.models import Product
 
 @api_view(['GET', 'POST'])
@@ -77,6 +77,10 @@ def get_warehouse_stock_view(request):
         if not cat:
             cat = ProductCategory.objects.create(code="CAT-MAIN", name="Asosiy Kategoriya")
 
+        mt = MaterialType.objects.first()
+        if not mt:
+            mt = MaterialType.objects.create(code="MAT-STD", name="Standart Material")
+
         unit = Unit.objects.first()
         if not unit:
             unit = Unit.objects.create(code="UNIT-PCS", name="dona", symbol="dona")
@@ -90,6 +94,7 @@ def get_warehouse_stock_view(request):
             code=p_code,
             name=p_name,
             category=cat,
+            material_type=mt,
             unit=unit,
             type="RAW_MATERIAL",
             unit_price=Decimal(str(d.get('unit_cost') or 0.0))
