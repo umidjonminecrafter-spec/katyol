@@ -1,30 +1,46 @@
 from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
 from apps.master_data.models import (
-    ProductCategory, MaterialType, Unit, Supplier, Customer,
+    ProductCategory, SupplierCategory, MaterialType, Unit, Supplier, Customer,
     Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType
 )
 
 MASTER_DATA_MODELS = {
     "product-categories": ProductCategory,
+    "product-category": ProductCategory,
+    "supplier-categories": SupplierCategory,
+    "supplier-category": SupplierCategory,
     "material-types": MaterialType,
+    "material-type": MaterialType,
     "units": Unit,
+    "unit": Unit,
     "suppliers": Supplier,
+    "supplier": Supplier,
     "customers": Customer,
+    "customer": Customer,
     "warehouses": Warehouse,
+    "warehouse": Warehouse,
     "warranty-types": WarrantyType,
+    "warranty-type": WarrantyType,
     "customer-types": CustomerType,
+    "customer-type": CustomerType,
     "service-types": ServiceType,
+    "service-type": ServiceType,
     "priorities": Priority,
+    "priority": Priority,
     "order-statuses": OrderStatus,
+    "order-status": OrderStatus,
     "expense-types": ExpenseType,
+    "expense-type": ExpenseType,
     "salary-types": SalaryType,
+    "salary-type": SalaryType,
 }
 
 class MasterDataService:
     @staticmethod
     def get_model(entity_key: str):
-        model = MASTER_DATA_MODELS.get(entity_key)
+        normalized_key = str(entity_key).lower().strip().replace('_', '-')
+        model = MASTER_DATA_MODELS.get(normalized_key)
         if not model:
             raise CustomAppException(message=f"Entity key '{entity_key}' topilmadi", status_code=404)
         return model
