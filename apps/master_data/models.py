@@ -115,6 +115,15 @@ class SalaryType(BaseModel):
     class Meta:
         db_table = 'salary_types'
 
+class ProductionStage(BaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    sequence = models.IntegerField(default=0)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'production_stages'
+
 
 class Company(BaseModel):
     name = models.CharField(max_length=255)

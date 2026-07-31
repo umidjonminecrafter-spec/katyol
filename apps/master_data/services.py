@@ -2,7 +2,7 @@ from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
 from apps.master_data.models import (
     ProductCategory, SupplierCategory, MaterialType, Unit, Supplier, Customer,
-    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType
+    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType, ProductionStage
 )
 
 MASTER_DATA_MODELS = {
@@ -10,6 +10,8 @@ MASTER_DATA_MODELS = {
     "product-category": ProductCategory,
     "supplier-categories": SupplierCategory,
     "supplier-category": SupplierCategory,
+    "production-stages": ProductionStage,
+    "production-stage": ProductionStage,
     "material-types": MaterialType,
     "material-type": MaterialType,
     "units": Unit,
@@ -48,10 +50,29 @@ class MasterDataService:
     @classmethod
     def get_multi(cls, entity_key: str, include_archived: bool = False):
         model = cls.get_model(entity_key)
+        
+        # Auto seed ProductionStage if empty
+        if model == ProductionStage and not model.objects.exists():
+            default_stages = [
+                {"code": "PLANNED", "name": "Rejalashtirilgan", "sequence": 10},
+                {"code": "CUTTING", "name": "Bichish / Kesish", "sequence": 20},
+                {"code": "WELDING", "name": "Payvandlash", "sequence": 30},
+                {"code": "ASSEMBLY", "name": "Yig'ish", "sequence": 40},
+                {"code": "TESTING", "name": "Sinov va Nazorat", "sequence": 50},
+                {"code": "COMPLETED", "name": "Bajarildi", "sequence": 60},
+            ]
+            for stg in default_stages:
+                model.objects.create(**stg)
+
         qs = model.objects.all()
         if not include_archived:
             qs = qs.exclude(status="ARCHIVED")
-        items = list(qs.order_by("-created_at")[:1000])
+
+        if hasattr(model, 'sequence'):
+            items = list(qs.order_by("sequence", "-created_at")[:1000])
+        else:
+            items = list(qs.order_by("-created_at")[:1000])
+
         total = qs.count()
         return items, total
 
