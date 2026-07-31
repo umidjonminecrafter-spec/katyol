@@ -1,7 +1,7 @@
 from django.db.models import Q
 from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
-from apps.products.models import Product
+from apps.products.models import Product, Recipe, RecipeItem
 
 class ProductService:
     @staticmethod
@@ -73,4 +73,67 @@ class ProductService:
         item = ProductService.get_by_id(product_id)
         SafeDeleteService.check_entity_references("products", product_id)
         item.delete()
+        return True
+
+
+class RecipeService:
+    @staticmethod
+    def get_multi(page: int = 1, limit: int = 20):
+        qs = Recipe.objects.all()
+        total = qs.count()
+        skip = (page - 1) * limit
+        items = list(qs.order_by('-created_at')[skip:skip + limit])
+        return items, total
+
+    @staticmethod
+    def create(data: dict, created_by_id: str = None) -> Recipe:
+        items_data = data.pop("items", [])
+        rec_num = (data.get("recipe_number") or "").strip()
+        if not rec_num or rec_num in ["undefined", "null"]:
+            import uuid
+            rec_num = f"BOM-{str(uuid.uuid4())[:6].upper()}"
+
+        if Recipe.objects.filter(recipe_number=rec_num).exists():
+            import uuid
+            rec_num = f"BOM-{str(uuid.uuid4())[:6].upper()}"
+
+        data["recipe_number"] = rec_num
+        if created_by_id and hasattr(Recipe, "created_by_id"):
+            data["created_by_id"] = created_by_id
+
+        recipe = Recipe.objects.create(**data)
+        for item_dict in items_data:
+            RecipeItem.objects.create(recipe=recipe, **item_dict)
+
+        return recipe
+
+    @staticmethod
+    def get_by_id(recipe_id: str) -> Recipe:
+        try:
+            return Recipe.objects.get(id=recipe_id)
+        except Recipe.DoesNotExist:
+            raise CustomAppException(message="Retsept topilmadi", status_code=404)
+
+    @staticmethod
+    def update(recipe_id: str, data: dict, updated_by_id: str = None) -> Recipe:
+        recipe = RecipeService.get_by_id(recipe_id)
+        items_data = data.pop("items", None)
+        for k, v in data.items():
+            if hasattr(recipe, k) and v is not None:
+                setattr(recipe, k, v)
+        if updated_by_id and hasattr(recipe, "updated_by_id"):
+            recipe.updated_by_id = updated_by_id
+        recipe.save()
+
+        if items_data is not None:
+            recipe.items.all().delete()
+            for item_dict in items_data:
+                RecipeItem.objects.create(recipe=recipe, **item_dict)
+
+        return recipe
+
+    @staticmethod
+    def delete(recipe_id: str) -> bool:
+        recipe = RecipeService.get_by_id(recipe_id)
+        recipe.delete()
         return True

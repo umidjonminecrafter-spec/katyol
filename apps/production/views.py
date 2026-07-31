@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated
 from core.audit_helper import record_audit_log
+from core.exceptions import CustomAppException
+from apps.production.models import ProductionBatch
 from apps.production.services import ProductionService
 from apps.production.serializers import ProductionBatchCreateSerializer, ProductionBatchUpdateSerializer, ProductionBatchResponseSerializer
 
@@ -45,24 +47,44 @@ def production_batches_list_create_view(request):
     )
     return Response({"success": True, "data": ProductionBatchResponseSerializer(batch).data}, status=201)
 
-@api_view(['PUT'])
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 @authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
-def update_production_batch_view(request, id):
+def production_batch_detail_view(request, id):
+    try:
+        batch = ProductionBatch.objects.get(id=id)
+    except ProductionBatch.DoesNotExist:
+        raise CustomAppException(message="Ishlab chiqarish partiyasi topilmadi", status_code=404)
+
+    if request.method == 'GET':
+        return Response({"success": True, "data": ProductionBatchResponseSerializer(batch).data})
+
     if request.user.role not in ["ADMIN", "MANAGER", "TECHNICIAN"]:
         return Response({"success": False, "error_code": "FORBIDDEN", "message": "Ruxsat etilmagan"}, status=403)
 
-    serializer = ProductionBatchUpdateSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    body_data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+    if request.method in ['PUT', 'PATCH']:
+        serializer = ProductionBatchUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        body_data = {k: v for k, v in serializer.validated_data.items() if v is not None}
 
-    batch = ProductionService.update_batch(id, body_data, updated_by_id=request.user.id)
+        updated_batch = ProductionService.update_batch(id, body_data, updated_by_id=request.user.id)
+        record_audit_log(
+            action="UPDATE",
+            entity_name="PRODUCTION_BATCH",
+            entity_id=id,
+            actor_id=request.user.id,
+            new_values=body_data,
+            request=request
+        )
+        return Response({"success": True, "data": ProductionBatchResponseSerializer(updated_batch).data})
+
+    # DELETE
+    ProductionService.delete_batch(id)
     record_audit_log(
-        action="UPDATE",
+        action="DELETE",
         entity_name="PRODUCTION_BATCH",
         entity_id=id,
         actor_id=request.user.id,
-        new_values=body_data,
         request=request
     )
-    return Response({"success": True, "data": ProductionBatchResponseSerializer(batch).data})
+    return Response({"success": True, "data": {"id": id, "deleted": True}})

@@ -2,7 +2,7 @@ from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
 from apps.master_data.models import (
     ProductCategory, SupplierCategory, MaterialType, Unit, Supplier, Customer,
-    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType, ProductionStage
+    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType, ProductionStage, InsuranceType
 )
 
 MASTER_DATA_MODELS = {
@@ -12,6 +12,8 @@ MASTER_DATA_MODELS = {
     "supplier-category": SupplierCategory,
     "production-stages": ProductionStage,
     "production-stage": ProductionStage,
+    "insurance-types": InsuranceType,
+    "insurance-type": InsuranceType,
     "material-types": MaterialType,
     "material-type": MaterialType,
     "units": Unit,
@@ -63,6 +65,17 @@ class MasterDataService:
             ]
             for stg in default_stages:
                 model.objects.create(**stg)
+
+        # Auto seed InsuranceType if empty
+        if model == InsuranceType and not model.objects.exists():
+            default_ins = [
+                {"code": "ACCIDENT", "name": "Baxtsiz hodisalardan sug'urta", "description": "Xodimlar uchun majburiy sug'urta"},
+                {"code": "HEALTH", "name": "Tibbiy sug'urta", "description": "Ixtiyoriy tibbiy sug'urta paketi"},
+                {"code": "PROPERTY", "name": "Mulk sug'urtasi", "description": "Ombor va uskunalar sug'urtasi"},
+                {"code": "LIABILITY", "name": "Fuqarolik javobgarligi sug'urtasi", "description": "Uchinchi shaxslar oldidagi javobgarlik"},
+            ]
+            for ins in default_ins:
+                model.objects.create(**ins)
 
         qs = model.objects.all()
         if not include_archived:

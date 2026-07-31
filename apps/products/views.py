@@ -3,8 +3,11 @@ from rest_framework.response import Response
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated, require_roles
 from core.audit_helper import record_audit_log
-from apps.products.services import ProductService
-from apps.products.serializers import ProductCreateSerializer, ProductUpdateSerializer, ProductResponseSerializer
+from apps.products.services import ProductService, RecipeService
+from apps.products.serializers import (
+    ProductCreateSerializer, ProductUpdateSerializer, ProductResponseSerializer,
+    RecipeCreateSerializer, RecipeResponseSerializer
+)
 
 @api_view(['GET', 'POST'])
 @authentication_classes([JWTAuthentication])
@@ -94,6 +97,73 @@ def product_detail_view(request, id):
     record_audit_log(
         action="DELETE",
         entity_name="PRODUCT",
+        entity_id=id,
+        actor_id=request.user.id,
+        request=request
+    )
+    return Response({"success": True, "data": {"id": id, "deleted": True}})
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def recipes_list_create_view(request):
+    if request.method == 'GET':
+        page = int(request.query_params.get('page', 1))
+        limit = int(request.query_params.get('limit', 20))
+        items, total = RecipeService.get_multi(page=page, limit=limit)
+        total_pages = (total + limit - 1) // limit if limit > 0 else 1
+        resp = RecipeResponseSerializer(items, many=True).data
+        return Response({
+            "success": True,
+            "data": resp,
+            "pagination": {"total": total, "page": page, "limit": limit, "total_pages": total_pages}
+        })
+
+    # POST
+    serializer = RecipeCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+    recipe = RecipeService.create(body_data, created_by_id=request.user.id)
+    record_audit_log(
+        action="CREATE",
+        entity_name="RECIPE",
+        entity_id=recipe.id,
+        actor_id=request.user.id,
+        new_values=body_data,
+        request=request
+    )
+    return Response({"success": True, "data": RecipeResponseSerializer(recipe).data}, status=201)
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def recipe_detail_view(request, id):
+    if request.method == 'GET':
+        recipe = RecipeService.get_by_id(id)
+        return Response({"success": True, "data": RecipeResponseSerializer(recipe).data})
+
+    if request.method in ['PUT', 'PATCH']:
+        serializer = RecipeCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        body_data = serializer.validated_data
+        updated_recipe = RecipeService.update(id, body_data, updated_by_id=request.user.id)
+        record_audit_log(
+            action="UPDATE",
+            entity_name="RECIPE",
+            entity_id=id,
+            actor_id=request.user.id,
+            new_values=body_data,
+            request=request
+        )
+        return Response({"success": True, "data": RecipeResponseSerializer(updated_recipe).data})
+
+    # DELETE
+    RecipeService.delete(id)
+    record_audit_log(
+        action="DELETE",
+        entity_name="RECIPE",
         entity_id=id,
         actor_id=request.user.id,
         request=request

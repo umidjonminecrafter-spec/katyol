@@ -37,6 +37,15 @@ class ProductionService:
         return batch
 
     @staticmethod
+    def delete_batch(batch_id: str) -> bool:
+        try:
+            batch = ProductionBatch.objects.get(id=batch_id)
+        except ProductionBatch.DoesNotExist:
+            raise CustomAppException(message="Ishlab chiqarish partiyasi topilmadi", status_code=404)
+        batch.delete()
+        return True
+
+    @staticmethod
     def get_multi(
         page: int = 1,
         limit: int = 20,

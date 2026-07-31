@@ -124,6 +124,14 @@ class ProductionStage(BaseModel):
     class Meta:
         db_table = 'production_stages'
 
+class InsuranceType(BaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'insurance_types'
+
 
 class Company(BaseModel):
     name = models.CharField(max_length=255)
