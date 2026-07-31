@@ -26,18 +26,28 @@ MASTER_DATA_MODELS = {
     "warehouse": Warehouse,
     "warranty-types": WarrantyType,
     "warranty-type": WarrantyType,
+    "warranties": WarrantyType,
+    "warranty": WarrantyType,
     "customer-types": CustomerType,
     "customer-type": CustomerType,
     "service-types": ServiceType,
     "service-type": ServiceType,
+    "services": ServiceType,
+    "service": ServiceType,
     "priorities": Priority,
     "priority": Priority,
     "order-statuses": OrderStatus,
     "order-status": OrderStatus,
+    "statuses": OrderStatus,
+    "status": OrderStatus,
     "expense-types": ExpenseType,
     "expense-type": ExpenseType,
+    "expenses": ExpenseType,
+    "expense": ExpenseType,
     "salary-types": SalaryType,
     "salary-type": SalaryType,
+    "salaries": SalaryType,
+    "salary": SalaryType,
 }
 
 class MasterDataService:
@@ -76,6 +86,17 @@ class MasterDataService:
             ]
             for ins in default_ins:
                 model.objects.create(**ins)
+
+        # Auto seed ServiceType if empty
+        if model == ServiceType and not model.objects.exists():
+            default_services = [
+                {"code": "INSTALLATION", "name": "O'rnatish va Montaj"},
+                {"code": "MAINTENANCE", "name": "Texnik Xizmat Ko'rsatish"},
+                {"code": "REPAIR", "name": "Ta'mirlash Hizmati"},
+                {"code": "DIAGNOSTICS", "name": "Diagnostika va Tekshiruv"},
+            ]
+            for srv in default_services:
+                model.objects.create(**srv)
 
         qs = model.objects.all()
         if not include_archived:
