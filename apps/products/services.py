@@ -1,7 +1,9 @@
+from decimal import Decimal
 from django.db.models import Q
 from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
-from apps.products.models import Product, Recipe, RecipeItem
+from apps.products.models import Product, Recipe, RecipeItem, Boiler
+from apps.master_data.models import WarrantyType
 
 class ProductService:
     @staticmethod
@@ -136,4 +138,115 @@ class RecipeService:
     def delete(recipe_id: str) -> bool:
         recipe = RecipeService.get_by_id(recipe_id)
         recipe.delete()
+        return True
+
+
+class BoilerService:
+    @staticmethod
+    def get_multi():
+        qs = Boiler.objects.all()
+        if not qs.exists():
+            default_boilers = [
+                {"name": "Kotyol K-50kW", "model_code": "K50KW-SKU", "capacity_kw": Decimal("50.00"), "fuel_type": "GAS", "base_price": Decimal("1200.00"), "selected_stage_ids": []},
+                {"name": "Kotyol K-100kW", "model_code": "K100KW-SKU", "capacity_kw": Decimal("100.00"), "fuel_type": "GAS", "base_price": Decimal("2200.00"), "selected_stage_ids": []},
+            ]
+            for b in default_boilers:
+                Boiler.objects.create(**b)
+            qs = Boiler.objects.all()
+        return list(qs.order_by('-created_at'))
+
+    @staticmethod
+    def create_boiler(data: dict, created_by_id: str = None) -> Boiler:
+        name = (data.get("modelName") or data.get("name") or "Yangi Kotyol").strip()
+        code = (data.get("internalCode") or data.get("model_code") or data.get("code") or "").strip()
+        if not code or code in ["undefined", "null"]:
+            import uuid
+            code = f"KTL-{str(uuid.uuid4())[:6].upper()}"
+
+        if Boiler.objects.filter(model_code=code).exists():
+            import uuid
+            code = f"{code}_{str(uuid.uuid4())[:4]}"
+
+        rec_id = (data.get("recipeId") or data.get("recipe_id") or "").strip()
+        recipe = None
+        if rec_id and rec_id not in ["undefined", "null"]:
+            recipe = Recipe.objects.filter(id=rec_id).first()
+
+        w_id = (data.get("warranty_type_id") or "").strip()
+        warranty_type = None
+        if w_id and w_id not in ["undefined", "null"]:
+            warranty_type = WarrantyType.objects.filter(id=w_id).first()
+
+        stages = data.get("selectedStageIds") or data.get("selected_stage_ids") or []
+
+        cap = Decimal(str(data.get("capacityKw") or data.get("capacity_kw") or 50.0))
+        price = Decimal(str(data.get("basePrice") or data.get("base_price") or 0.0))
+
+        boiler = Boiler.objects.create(
+            name=name,
+            model_code=code,
+            capacity_kw=cap,
+            fuel_type=data.get("fuelType") or data.get("fuel_type") or "GAS",
+            base_price=price,
+            recipe=recipe,
+            warranty_type=warranty_type,
+            selected_stage_ids=stages,
+            status=data.get("status") or "ACTIVE",
+            created_by_id=created_by_id
+        )
+        return boiler
+
+    @staticmethod
+    def update_boiler(boiler_id: str, data: dict, updated_by_id: str = None) -> Boiler:
+        try:
+            boiler = Boiler.objects.get(id=boiler_id)
+        except Boiler.DoesNotExist:
+            raise CustomAppException(message="Kotyol modeli topilmadi", status_code=404)
+
+        if "modelName" in data or "name" in data:
+            boiler.name = (data.get("modelName") or data.get("name") or boiler.name).strip()
+
+        if "internalCode" in data or "model_code" in data or "code" in data:
+            code = (data.get("internalCode") or data.get("model_code") or data.get("code") or "").strip()
+            if code:
+                boiler.model_code = code
+
+        if "recipeId" in data or "recipe_id" in data:
+            rec_id = (data.get("recipeId") or data.get("recipe_id") or "").strip()
+            boiler.recipe = Recipe.objects.filter(id=rec_id).first() if rec_id else None
+
+        if "selectedStageIds" in data or "selected_stage_ids" in data:
+            boiler.selected_stage_ids = data.get("selectedStageIds") or data.get("selected_stage_ids") or []
+
+        if "status" in data and data["status"]:
+            boiler.status = data["status"]
+
+        if "capacityKw" in data or "capacity_kw" in data:
+            cap = data.get("capacityKw") or data.get("capacity_kw")
+            if cap is not None:
+                boiler.capacity_kw = Decimal(str(cap))
+
+        if "fuelType" in data or "fuel_type" in data:
+            fuel = data.get("fuelType") or data.get("fuel_type")
+            if fuel:
+                boiler.fuel_type = fuel
+
+        if "basePrice" in data or "base_price" in data:
+            bp = data.get("basePrice") or data.get("base_price")
+            if bp is not None:
+                boiler.base_price = Decimal(str(bp))
+
+        if updated_by_id and hasattr(boiler, "updated_by_id"):
+            boiler.updated_by_id = updated_by_id
+
+        boiler.save()
+        return boiler
+
+    @staticmethod
+    def delete_boiler(boiler_id: str) -> bool:
+        try:
+            boiler = Boiler.objects.get(id=boiler_id)
+        except Boiler.DoesNotExist:
+            raise CustomAppException(message="Kotyol modeli topilmadi", status_code=404)
+        boiler.delete()
         return True

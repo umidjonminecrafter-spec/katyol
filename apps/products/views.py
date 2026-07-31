@@ -3,10 +3,12 @@ from rest_framework.response import Response
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated, require_roles
 from core.audit_helper import record_audit_log
-from apps.products.services import ProductService, RecipeService
+from apps.products.models import Boiler
+from apps.products.services import ProductService, RecipeService, BoilerService
 from apps.products.serializers import (
     ProductCreateSerializer, ProductUpdateSerializer, ProductResponseSerializer,
-    RecipeCreateSerializer, RecipeResponseSerializer
+    RecipeCreateSerializer, RecipeResponseSerializer,
+    BoilerCreateSerializer, BoilerResponseSerializer
 )
 
 @api_view(['GET', 'POST'])
@@ -164,6 +166,71 @@ def recipe_detail_view(request, id):
     record_audit_log(
         action="DELETE",
         entity_name="RECIPE",
+        entity_id=id,
+        actor_id=request.user.id,
+        request=request
+    )
+    return Response({"success": True, "data": {"id": id, "deleted": True}})
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def boilers_list_create_view(request):
+    if request.method == 'GET':
+        items = BoilerService.get_multi()
+        resp = BoilerResponseSerializer(items, many=True).data
+        return Response({"success": True, "data": resp})
+
+    # POST (create)
+    serializer = BoilerCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    body_data = serializer.validated_data
+    boiler = BoilerService.create_boiler(body_data, created_by_id=request.user.id)
+    record_audit_log(
+        action="CREATE",
+        entity_name="BOILER",
+        entity_id=boiler.id,
+        actor_id=request.user.id,
+        new_values=body_data,
+        request=request
+    )
+    return Response({"success": True, "data": BoilerResponseSerializer(boiler).data}, status=201)
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def boiler_detail_view(request, id):
+    try:
+        boiler = Boiler.objects.get(id=id)
+    except Boiler.DoesNotExist:
+        from core.exceptions import CustomAppException
+        raise CustomAppException(message="Kotyol modeli topilmadi", status_code=404)
+
+    if request.method == 'GET':
+        return Response({"success": True, "data": BoilerResponseSerializer(boiler).data})
+
+    if request.method in ['PUT', 'PATCH']:
+        serializer = BoilerCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        body_data = serializer.validated_data
+        updated_boiler = BoilerService.update_boiler(id, body_data, updated_by_id=request.user.id)
+        record_audit_log(
+            action="UPDATE",
+            entity_name="BOILER",
+            entity_id=id,
+            actor_id=request.user.id,
+            new_values=body_data,
+            request=request
+        )
+        return Response({"success": True, "data": BoilerResponseSerializer(updated_boiler).data})
+
+    # DELETE
+    BoilerService.delete_boiler(id)
+    record_audit_log(
+        action="DELETE",
+        entity_name="BOILER",
         entity_id=id,
         actor_id=request.user.id,
         request=request

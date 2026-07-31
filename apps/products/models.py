@@ -38,12 +38,13 @@ class RecipeItem(BaseModel):
 class Boiler(BaseModel):
     model_code = models.CharField(max_length=100, unique=True)
     name = models.CharField(max_length=255)
-    capacity_kw = models.DecimalField(max_digits=10, decimal_places=2)
-    fuel_type = models.CharField(max_length=50)  # 'GAS', 'COAL', 'ELECTRIC', 'DUAL'
+    capacity_kw = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
+    fuel_type = models.CharField(max_length=50, default="GAS")  # 'GAS', 'COAL', 'ELECTRIC', 'DUAL'
     efficiency_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    base_price = models.DecimalField(max_digits=15, decimal_places=2)
+    base_price = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     recipe = models.ForeignKey('Recipe', on_delete=models.SET_NULL, null=True, blank=True, db_column='recipe_id', related_name='boilers')
     warranty_type = models.ForeignKey('master_data.WarrantyType', on_delete=models.SET_NULL, null=True, blank=True, db_column='warranty_type_id', related_name='boilers')
+    selected_stage_ids = models.JSONField(default=list, blank=True, null=True)
 
     class Meta:
         db_table = 'boilers'
