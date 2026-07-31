@@ -132,6 +132,40 @@ class InsuranceType(BaseModel):
     class Meta:
         db_table = 'insurance_types'
 
+class Currency(BaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    symbol = models.CharField(max_length=20, default="$")
+    exchange_rate = models.DecimalField(max_digits=12, decimal_places=4, default=1.0000)
+
+    class Meta:
+        db_table = 'currencies'
+
+class DefectReason(BaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'defect_reasons'
+
+class Role(BaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'roles'
+
+class PermissionsMatrix(BaseModel):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    module = models.CharField(max_length=100, default="GENERAL")
+    description = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'permissions_matrix'
+
 
 class Company(BaseModel):
     name = models.CharField(max_length=255)

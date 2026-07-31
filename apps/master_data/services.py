@@ -2,7 +2,8 @@ from core.exceptions import CustomAppException
 from core.safe_delete import SafeDeleteService
 from apps.master_data.models import (
     ProductCategory, SupplierCategory, MaterialType, Unit, Supplier, Customer,
-    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType, ProductionStage, InsuranceType
+    Warehouse, WarrantyType, CustomerType, ServiceType, Priority, OrderStatus, ExpenseType, SalaryType, ProductionStage, InsuranceType,
+    Currency, DefectReason, Role, PermissionsMatrix
 )
 
 MASTER_DATA_MODELS = {
@@ -48,6 +49,17 @@ MASTER_DATA_MODELS = {
     "salary-type": SalaryType,
     "salaries": SalaryType,
     "salary": SalaryType,
+    "currencies": Currency,
+    "currency": Currency,
+    "defect-reasons": DefectReason,
+    "defect_reasons": DefectReason,
+    "defect-reason": DefectReason,
+    "roles": Role,
+    "role": Role,
+    "permissions-matrix": PermissionsMatrix,
+    "permissions_matrix": PermissionsMatrix,
+    "permissions": PermissionsMatrix,
+    "permission": PermissionsMatrix,
 }
 
 class MasterDataService:
@@ -97,6 +109,48 @@ class MasterDataService:
             ]
             for srv in default_services:
                 model.objects.create(**srv)
+
+        # Auto seed Currency if empty
+        if model == Currency and not model.objects.exists():
+            default_currencies = [
+                {"code": "USD", "name": "AQSH Dollari", "symbol": "$", "exchange_rate": 1.0000},
+                {"code": "UZS", "name": "O'zbekiston So'mi", "symbol": "so'm", "exchange_rate": 12800.0000},
+                {"code": "EUR", "name": "Yevro", "symbol": "€", "exchange_rate": 1.0800},
+            ]
+            for c in default_currencies:
+                model.objects.create(**c)
+
+        # Auto seed DefectReason if empty
+        if model == DefectReason and not model.objects.exists():
+            default_defects = [
+                {"code": "MATERIAL_DEFECT", "name": "Xom-ashyo nuqsoni", "description": "Xom-ashyo sifatiga mos emasligi"},
+                {"code": "WELDING_DEFECT", "name": "Payvandlash xatosi", "description": "Payvand chokining noto'liq yoki darz ketganligi"},
+                {"code": "ASSEMBLY_DEFECT", "name": "Yig'ish nuqsoni", "description": "Yig'ish jarayonidagi xatolik"},
+            ]
+            for d in default_defects:
+                model.objects.create(**d)
+
+        # Auto seed Role if empty
+        if model == Role and not model.objects.exists():
+            default_roles = [
+                {"code": "ADMIN", "name": "Tizim Administratori", "description": "To'liq ruxsatlar"},
+                {"code": "MANAGER", "name": "Menejer", "description": "Boshqaruv va hisobotlar"},
+                {"code": "TECHNICIAN", "name": "Texnik / Usta", "description": "Ishlab chiqarish va servis"},
+                {"code": "WAREHOUSEMAN", "name": "Omborchi", "description": "Ombor va zaxiralar"},
+            ]
+            for r in default_roles:
+                model.objects.create(**r)
+
+        # Auto seed PermissionsMatrix if empty
+        if model == PermissionsMatrix and not model.objects.exists():
+            default_perms = [
+                {"code": "READ_PRODUCTS", "name": "Mahsulotlarni ko'rish", "module": "PRODUCTS"},
+                {"code": "WRITE_PRODUCTS", "name": "Mahsulotlarni tahrirlash", "module": "PRODUCTS"},
+                {"code": "READ_ORDERS", "name": "Buyurtmalarni ko'rish", "module": "ORDERS"},
+                {"code": "WRITE_ORDERS", "name": "Buyurtmalarni yaratish/tahrirlash", "module": "ORDERS"},
+            ]
+            for p in default_perms:
+                model.objects.create(**p)
 
         qs = model.objects.all()
         if not include_archived:
