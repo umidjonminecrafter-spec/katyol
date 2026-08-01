@@ -8,6 +8,7 @@ from rest_framework import status
 from core.authentication import JWTAuthentication
 from core.permissions import IsAuthenticated
 from core.exceptions import CustomAppException
+from core.audit_helper import record_audit_log
 from apps.accounts.models import User, Branch, Organization, Position
 from apps.accounts.serializers import (
     LoginRequestSerializer, RegisterRequestSerializer, UserCreateSerializer,
@@ -45,6 +46,39 @@ def create_employee_view(request):
     serializer.is_valid(raise_exception=True)
     user = AuthService.create_employee_user(serializer.validated_data, request.user)
     return Response({'success': True, 'data': _user_info(user)})
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def employee_detail_view(request, id):
+    user = AuthService.get_employee_by_id(id)
+
+    if request.method == 'GET':
+        return Response({'success': True, 'data': _user_info(user)})
+
+    if request.method in ['PUT', 'PATCH']:
+        updated_user = AuthService.update_employee_user(id, request.data)
+        record_audit_log(
+            action="UPDATE",
+            entity_name="USER",
+            entity_id=id,
+            actor_id=request.user.id,
+            new_values=request.data,
+            request=request
+        )
+        return Response({'success': True, 'data': _user_info(updated_user)})
+
+    # DELETE
+    AuthService.delete_employee_user(id)
+    record_audit_log(
+        action="DELETE",
+        entity_name="USER",
+        entity_id=id,
+        actor_id=request.user.id,
+        request=request
+    )
+    return Response({'success': True, 'message': "Xodim muvaffaqiyatli o'chirildi"})
 
 
 @api_view(['POST'])

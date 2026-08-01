@@ -16,15 +16,16 @@ class RegisterRequestSerializer(serializers.Serializer):
 
 
 class UserCreateSerializer(serializers.Serializer):
-    phone = serializers.CharField()
-    password = serializers.CharField()
-    full_name = serializers.CharField()
-    role = serializers.CharField(default='EMPLOYEE')
+    phone = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
+    password = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
+    full_name = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
+    role = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='EMPLOYEE')
     position_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
     department = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
     salary_amount = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
     salary_type_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
     hire_date = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='')
+    status = serializers.CharField(required=False, allow_null=True, allow_blank=True, default='ACTIVE')
 
 
 class UserInfoSerializer(serializers.Serializer):
@@ -34,6 +35,9 @@ class UserInfoSerializer(serializers.Serializer):
     username = serializers.SerializerMethodField()
     phone = serializers.SerializerMethodField()
     department = serializers.SerializerMethodField()
+    position_id = serializers.SerializerMethodField()
+    position_name = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
     organization_name = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
     organization_id = serializers.SerializerMethodField()
@@ -50,6 +54,17 @@ class UserInfoSerializer(serializers.Serializer):
 
     def get_department(self, obj):
         return getattr(obj, 'department', '') or ''
+
+    def get_position_id(self, obj):
+        return getattr(obj, 'position_id', '') or ''
+
+    def get_position_name(self, obj):
+        if hasattr(obj, 'position') and obj.position:
+            return obj.position.name
+        return ''
+
+    def get_status(self, obj):
+        return getattr(obj, 'status', 'ACTIVE') or 'ACTIVE'
 
     def get_organization_name(self, obj):
         return getattr(obj, 'organization_name', '') or ''
